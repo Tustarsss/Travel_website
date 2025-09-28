@@ -7,9 +7,9 @@ from collections.abc import AsyncGenerator
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories import GraphRepository, RegionRepository
+from app.repositories import FacilityRepository, GraphRepository, RegionRepository
 from app.repositories.session import get_session
-from app.services import RecommendationService, RoutingService
+from app.services import FacilityService, RecommendationService, RoutingService
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -38,4 +38,20 @@ async def get_routing_service(
 	return RoutingService(graph_repository, region_repository)
 
 
-__all__ = ["get_db_session", "get_recommendation_service", "get_routing_service"]
+async def get_facility_service(
+	session: AsyncSession = Depends(get_db_session),
+) -> FacilityService:
+	"""Provide a :class:`~app.services.facility.FacilityService` instance."""
+
+	facility_repository = FacilityRepository(session)
+	graph_repository = GraphRepository(session)
+	region_repository = RegionRepository(session)
+	return FacilityService(facility_repository, graph_repository, region_repository)
+
+
+__all__ = [
+	"get_db_session",
+	"get_recommendation_service",
+	"get_routing_service",
+	"get_facility_service",
+]

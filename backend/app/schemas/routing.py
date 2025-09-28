@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from app.algorithms import WeightStrategy
 
@@ -16,7 +16,7 @@ class RouteNode(BaseModel):
     latitude: float
     longitude: float
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RouteSegment(BaseModel):
@@ -26,7 +26,7 @@ class RouteSegment(BaseModel):
     distance: float = Field(ge=0)
     time: float = Field(ge=0)
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RoutePlanResponse(BaseModel):
@@ -39,4 +39,8 @@ class RoutePlanResponse(BaseModel):
     generated_at: datetime
     allowed_transport_modes: List[str]
 
-    model_config = {"json_encoders": {WeightStrategy: lambda s: s.value}}
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("strategy")
+    def _serialise_strategy(self, strategy: WeightStrategy) -> str:
+        return strategy.value

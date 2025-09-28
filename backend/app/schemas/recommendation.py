@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from app.models.locations import RegionType
 from app.services import RecommendationSort
@@ -22,7 +22,7 @@ class RegionSummary(BaseModel):
     city: str | None = None
     description: str | None = None
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RegionRecommendationItem(BaseModel):
@@ -45,3 +45,9 @@ class RegionRecommendationResponse(BaseModel):
     query: str | None = None
     interests: List[str] = Field(default_factory=list)
     data_source: str = Field(default="database", description="Source of recommendation data")
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("sort_by")
+    def _serialize_sort_by(self, value: RecommendationSort) -> str:
+        return value.value

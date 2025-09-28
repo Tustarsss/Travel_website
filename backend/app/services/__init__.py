@@ -7,6 +7,7 @@ from .recommendation import (
 	RecommendationSort,
 	RegionRecommendation,
 )
+from .facility import FacilityRoute, FacilityService
 from .routing import (
 	NodeValidationError,
 	RegionNotFoundError,
@@ -23,6 +24,8 @@ __all__ = [
 	"RecommendationSort",
 	"RecommendationResult",
 	"RegionRecommendation",
+	"FacilityService",
+	"FacilityRoute",
 	"RoutingService",
 	"RoutePlan",
 	"RouteNode",
