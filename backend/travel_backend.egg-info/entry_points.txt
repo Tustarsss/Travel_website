@@ -1,0 +1,2 @@
+[console_scripts]
+travel-backend = app.__main__:run

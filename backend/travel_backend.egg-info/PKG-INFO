@@ -1,0 +1,82 @@
+Metadata-Version: 2.4
+Name: travel-backend
+Version: 0.1.0
+Summary: Backend service for the personalized travel system
+Author-email: Travel System Dev Team <dev@example.com>
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.111.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: sqlmodel>=0.0.19
+Requires-Dist: sqlalchemy>=2.0.30
+Requires-Dist: aiosqlite>=0.19.0
+Requires-Dist: pydantic-settings>=2.3.0
+Requires-Dist: alembic>=1.13.1
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: jinja2>=3.1.4
+Provides-Extra: dev
+Requires-Dist: pytest>=8.2.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0.0; extra == "dev"
+Requires-Dist: ruff>=0.5.0; extra == "dev"
+Requires-Dist: mypy>=1.10.0; extra == "dev"
+Requires-Dist: types-requests>=2.32.0.20240602; extra == "dev"
+Provides-Extra: data
+Requires-Dist: faker>=25.0.0; extra == "data"
+Requires-Dist: numpy>=1.26.0; extra == "data"
+Requires-Dist: rich>=13.7.0; extra == "data"
+
+# Travel Backend
+
+FastAPI backend service for the personalized travel system.
+
+## Getting Started
+
+1. Install dependencies with [uv](https://github.com/astral-sh/uv):
+
+```bash
+uv sync --all-extras
+```
+
+2. Run the development server:
+
+```bash
+uv run uvicorn app.main:app --reload
+```
+
+3. Execute tests:
+
+```bash
+uv run pytest
+```
+
+## Data Pipeline
+
+The backend ships with scripts that cover the dataset lifecycle described in the project plan:
+
+1. **Generate synthetic data** (uses Faker/Numpy):
+
+	```bash
+	uv run python scripts/generate_data.py --seed 42
+	```
+
+	Outputs JSON files under `data/generated/`.
+
+2. **Seed the SQLite database** (also creates placeholder index files):
+
+	```bash
+	uv run python scripts/seed_demo.py --drop
+	```
+
+	The `--drop` flag clears existing rows before inserting the new dataset.
+
+3. **Validate dataset constraints** (counts, required files):
+
+	```bash
+	uv run python scripts/validate_data.py
+	```
+
+	Expect a summary that meets the minimum thresholds (≥200 regions, ≥200 edges, etc.).
+
+All commands assume you installed the `data` extra (e.g. `uv sync --extra data --extra dev`) so that Faker and Numpy are available.
