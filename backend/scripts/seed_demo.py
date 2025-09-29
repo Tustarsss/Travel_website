@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -110,7 +111,7 @@ async def seed_database(dataset_dir: Path, drop_existing: bool) -> None:
 
 
 def ensure_directories() -> None:
-    for path in (Path("storage"), Path("indexes")):
+    for path in (Path("storage"), Path("indexes"), Path("indexes/map_tiles")):
         path.mkdir(parents=True, exist_ok=True)
     spatial = Path("indexes/spatial.idx")
     fulltext = Path("indexes/fulltext.idx")
@@ -118,6 +119,101 @@ def ensure_directories() -> None:
         spatial.write_text("", encoding="utf-8")
     if not fulltext.exists():
         fulltext.write_text("", encoding="utf-8")
+
+
+def export_geojson_tiles(dataset_dir: Path) -> None:
+    tiles_dir = Path("indexes/map_tiles")
+    tiles_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clear old tiles
+    for tile in tiles_dir.glob("region_*.geojson"):
+        tile.unlink()
+
+    regions = _load_json(dataset_dir / "regions.json")
+    nodes = _load_json(dataset_dir / "graph_nodes.json")
+    edges = _load_json(dataset_dir / "graph_edges.json")
+
+    nodes_by_id = {node["id"]: node for node in nodes}
+    nodes_by_region: dict[int, list[dict]] = {}
+    for node in nodes:
+        nodes_by_region.setdefault(node["region_id"], []).append(node)
+
+    edges_by_region: dict[int, list[dict]] = {}
+    for edge in edges:
+        edges_by_region.setdefault(edge["region_id"], []).append(edge)
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    index_payload = {"tiles": []}
+
+    for region in regions:
+        region_id = region["id"]
+        features: list[dict] = []
+
+        for edge in edges_by_region.get(region_id, []):
+            start = nodes_by_id.get(edge["start_node_id"])
+            end = nodes_by_id.get(edge["end_node_id"])
+            if not start or not end:
+                continue
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [
+                            [start["longitude"], start["latitude"]],
+                            [end["longitude"], end["latitude"]],
+                        ],
+                    },
+                    "properties": {
+                        "feature_type": "edge",
+                        "distance": edge.get("distance"),
+                        "transport_modes": edge.get("transport_modes", []),
+                    },
+                }
+            )
+
+        for node in nodes_by_region.get(region_id, []):
+            node_type = "poi"
+            if node.get("building_id"):
+                node_type = "building"
+            elif node.get("facility_id"):
+                node_type = "facility"
+
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [node["longitude"], node["latitude"]],
+                    },
+                    "properties": {
+                        "feature_type": node_type,
+                        "name": node.get("name"),
+                        "building_id": node.get("building_id"),
+                        "facility_id": node.get("facility_id"),
+                    },
+                }
+            )
+
+        tile_path = tiles_dir / f"region_{region_id}.geojson"
+        tile_path.write_text(
+            json.dumps({"type": "FeatureCollection", "features": features}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        index_payload["tiles"].append(
+            {
+                "region_id": region_id,
+                "name": region.get("name"),
+                "tile": tile_path.name,
+                "updated_at": timestamp,
+            }
+        )
+
+    (tiles_dir / "index.json").write_text(
+        json.dumps(index_payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def main() -> None:
@@ -135,6 +231,7 @@ def main() -> None:
     import asyncio
 
     asyncio.run(seed_database(dataset_dir, drop_existing=args.drop))
+    export_geojson_tiles(dataset_dir)
     print("[seed-demo] Demo dataset seeding complete!")
 
 

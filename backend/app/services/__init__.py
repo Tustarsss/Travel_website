@@ -17,6 +17,8 @@ from .routing import (
 	RouteNode,
 	RoutingService,
 )
+from .map_data import MapDataService
+from .search import SearchService
 
 __all__ = [
 	"top_k_by_score",
@@ -33,4 +35,6 @@ __all__ = [
 	"RegionNotFoundError",
 	"NodeValidationError",
 	"RouteNotFoundError",
+	"MapDataService",
+	"SearchService",
 ]

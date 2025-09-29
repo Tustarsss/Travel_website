@@ -21,3 +21,8 @@ pytest-cov>=5.0.0
 ruff>=0.5.0
 mypy>=1.10.0
 types-requests>=2.32.0.20240602
+
+[map_data]
+osmnx>=1.2.0
+geopandas>=0.8.0
+shapely>=1.7.0

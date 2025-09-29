@@ -22,6 +22,7 @@ class RegionRepository:
         *,
         search: str | None = None,
         region_type: RegionType | None = None,
+        limit: int | None = None,
     ) -> list[Region]:
         """Return regions optionally filtered by search term and type."""
 
@@ -40,6 +41,11 @@ class RegionRepository:
                 )
             )
 
+        statement = statement.order_by(Region.popularity.desc(), Region.rating.desc(), Region.name.asc())
+
+        if limit is not None and limit > 0:
+            statement = statement.limit(limit)
+
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
@@ -52,6 +58,14 @@ class RegionRepository:
         """Return all regions, optionally filtered by type."""
 
         return await self.fetch_regions(search=None, region_type=region_type)
+
+    async def search_regions(self, keyword: str, *, limit: int = 10) -> list[Region]:
+        """Search regions by keyword with optional limit."""
+
+        if not keyword or not keyword.strip() or limit <= 0:
+            return []
+
+        return await self.fetch_regions(search=keyword.strip(), region_type=None, limit=limit)
 
     async def upsert_regions(self, regions: Iterable[Region]) -> None:
         """Persist regions, inserting new records and updating existing ones."""

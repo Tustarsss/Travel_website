@@ -29,6 +29,19 @@ export interface RegionRecommendationResponse {
   data_source: string
 }
 
+export interface RegionSearchResult {
+  id: number
+  name: string
+  city?: string | null
+  type?: RegionType | null
+  keywords?: string[] | null
+  description?: string | null
+}
+
+export interface RegionSearchResponse {
+  items: RegionSearchResult[]
+}
+
 export type WeightStrategy = 'distance' | 'time'
 export type TransportMode = 'walk' | 'bike' | 'electric_cart'
 
@@ -58,6 +71,8 @@ export interface RoutePlanResponse {
   allowed_transport_modes: TransportMode[] | string[]
 }
 
+import type { FeatureCollection } from 'geojson'
+
 export type FacilityCategory =
   | 'restroom'
   | 'restaurant'
@@ -69,6 +84,20 @@ export type FacilityCategory =
   | 'parking'
   | 'information'
   | 'service'
+
+export interface RegionNodeSummary {
+  id: number
+  name: string
+  code?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  region_id: number
+  description?: string | null
+}
+
+export interface RegionNodeSearchResponse {
+  items: RegionNodeSummary[]
+}
 
 export interface FacilityRouteItem {
   facility_id: number
@@ -89,3 +118,5 @@ export interface FacilityRouteResponse {
   items: FacilityRouteItem[]
   total: number
 }
+
+export type MapFeatureCollection = FeatureCollection

@@ -1,4 +1,4 @@
-"""Tests for synthetic data generation and validation utilities."""
+"""Tests for real-data-only generation and dataset validation utilities."""
 
 import json
 from pathlib import Path
@@ -6,18 +6,95 @@ from pathlib import Path
 import pytest
 
 from app.services.data_generation import generator
+from app.services.data_generation.osm_adapter import AdaptedRegionData, RealDataUnavailableError
 from scripts import validate_data
 
 
-@pytest.mark.parametrize("region_count, buildings_range, facilities_range, users_count", [(5, (2, 3), (1, 2), 3)])
-def test_generate_dataset_writes_expected_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, region_count: int, buildings_range: tuple[int, int], facilities_range: tuple[int, int], users_count: int) -> None:
-    """Generation should honour patched configuration and create JSON outputs."""
+def _stub_region_payload(region_id: int, min_buildings: int, min_facilities: int) -> AdaptedRegionData:
+    """Build deterministic building/facility collections satisfying minimum counts."""
+
+    building_count = max(min_buildings, 3)
+    facility_count = max(min_facilities, 2)
+
+    def _points(prefix: str, count: int) -> list[dict]:
+        return [
+            {
+                "name": f"{prefix}-{region_id}-{index}",
+                "latitude": 30.0 + region_id * 0.1 + index * 0.001,
+                "longitude": 120.0 + region_id * 0.1 + index * 0.001,
+            }
+            for index in range(count)
+        ]
+
+    return AdaptedRegionData(buildings=_points("building", building_count), facilities=_points("facility", facility_count))
+
+
+@pytest.mark.parametrize(
+    "region_count, buildings_range, facilities_range, users_count",
+    [(3, (2, 3), (1, 2), 4)],
+)
+def test_generate_dataset_writes_expected_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    region_count: int,
+    buildings_range: tuple[int, int],
+    facilities_range: tuple[int, int],
+    users_count: int,
+) -> None:
+    """Generation should honour patched configuration and create JSON outputs from real-data pipeline."""
 
     monkeypatch.setattr(generator, "MIN_REGION_COUNT", region_count)
     monkeypatch.setattr(generator, "BUILDINGS_PER_REGION", buildings_range)
     monkeypatch.setattr(generator, "FACILITIES_PER_REGION", facilities_range)
     monkeypatch.setattr(generator, "USERS_COUNT", users_count)
     monkeypatch.setattr(generator, "DIARIES_PER_USER", (1, 2))
+
+    call_tracker: list[int] = []
+
+    def fake_get_osm_data(_: str) -> dict:
+        call_tracker.append(1)
+        return {"bounds": [10.0, 20.0, 30.0, 40.0]}
+
+    def fake_adapt(osm_payload, region_id, region_type, min_buildings, min_facilities, *, location=None):
+        return _stub_region_payload(region_id, min_buildings, min_facilities)
+
+    monkeypatch.setattr(generator, "get_osm_data_for_location", fake_get_osm_data)
+    monkeypatch.setattr(generator, "adapt_osm_payload", fake_adapt)
+
+    graph_nodes_stub = [
+        {"name": "交叉口1", "latitude": 30.0, "longitude": 120.0},
+        {"name": "交叉口2", "latitude": 30.001, "longitude": 120.001},
+        {"name": "交叉口3", "latitude": 30.002, "longitude": 120.002},
+    ]
+    graph_edges_stub = [
+        {
+            "source_index": 0,
+            "target_index": 1,
+            "distance": 100.0,
+            "ideal_speed": 1.2,
+            "congestion": 0.5,
+            "transport_modes": ["walk"],
+        },
+        {
+            "source_index": 1,
+            "target_index": 2,
+            "distance": 120.0,
+            "ideal_speed": 1.3,
+            "congestion": 0.6,
+            "transport_modes": ["walk"],
+        },
+    ]
+
+    monkeypatch.setattr(
+        generator,
+        "convert_osm_graph_to_components",
+        lambda graph, region_type: (graph_nodes_stub, graph_edges_stub),
+    )
+    monkeypatch.setattr(
+        generator,
+        "build_graph_from_coordinates",
+        lambda coords, region_type: (graph_nodes_stub, graph_edges_stub),
+    )
 
     dataset = generator.generate_dataset(tmp_path, seed=7)
 
@@ -29,8 +106,22 @@ def test_generate_dataset_writes_expected_files(tmp_path: Path, monkeypatch: pyt
     assert len(dataset["graph_edges"]) > 0
     assert len(dataset["diaries"]) > 0
 
+    # All collections should have been flushed to disk for downstream import scripts.
     for key in dataset:
         assert (tmp_path / f"{key}.json").exists()
+    # Ensure the real-data fetch pipeline was invoked for each region.
+    assert len(call_tracker) == region_count
+    # Routing nodes should be intersections without facility/building bindings.
+    assert all(node["building_id"] is None and node["facility_id"] is None for node in dataset["graph_nodes"])
+
+
+def test_generate_dataset_requires_real_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Generator must fail fast when no real OSM payload can be acquired."""
+
+    monkeypatch.setattr(generator, "get_osm_data_for_location", lambda _: None)
+
+    with pytest.raises(RealDataUnavailableError):
+        generator.generate_dataset(tmp_path, seed=1, region_target=1)
 
 
 def test_validate_dataset_detects_violations(tmp_path: Path) -> None:

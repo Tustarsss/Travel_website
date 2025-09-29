@@ -1,17 +1,30 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { LMap, LTileLayer, LPolyline, LCircleMarker, LTooltip } from '@vue-leaflet/vue-leaflet'
-import { latLngBounds, type LatLngExpression, type Map as LeafletMap } from 'leaflet'
-import type { RoutePlanResponse } from '../../types/api'
+import { LMap, LTileLayer, LPolyline, LCircleMarker, LTooltip, LGeoJson } from '@vue-leaflet/vue-leaflet'
+import {
+  circleMarker,
+  latLngBounds,
+  type GeoJSONOptions,
+  type LatLngExpression,
+  type Map as LeafletMap,
+} from 'leaflet'
+import type { Feature, FeatureCollection, Geometry } from 'geojson'
+import type { FacilityRouteItem, RoutePlanResponse } from '../../types/api'
 
 const props = withDefaults(
   defineProps<{
     plan?: RoutePlanResponse | null
+    tile?: FeatureCollection | null
+    loading?: boolean
+    facilities?: FacilityRouteItem[]
     initialCenter?: [number, number]
     initialZoom?: number
   }>(),
   {
     plan: null,
+    tile: null,
+    loading: false,
+    facilities: () => [],
     initialCenter: () => [39.9042, 116.4074] as [number, number],
     initialZoom: 14,
   }
@@ -37,15 +50,82 @@ const polylinePoints = computed(() => nodePoints.value.map((node) => node.coords
 const startNodeId = computed(() => nodePoints.value[0]?.id ?? null)
 const endNodeId = computed(() => nodePoints.value[nodePoints.value.length - 1]?.id ?? null)
 
-const bounds = computed(() => {
+const facilityPoints = computed(() =>
+  (props.facilities ?? [])
+    .filter((item) => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
+    .map((item) => ({
+      id: item.facility_id,
+      label: item.name,
+      coords: [item.latitude, item.longitude] as [number, number],
+      distance: item.distance,
+      travelTime: item.travel_time,
+      category: item.category,
+    }))
+)
+
+const boundsFromNodes = computed(() => {
   if (!nodePoints.value.length) {
     return null
   }
   return latLngBounds(nodePoints.value.map((point) => point.coords) as LatLngExpression[])
 })
 
+const boundsFromFacilities = computed(() => {
+  if (!facilityPoints.value.length) {
+    return null
+  }
+  return latLngBounds(facilityPoints.value.map((point) => point.coords) as LatLngExpression[])
+})
+
+type LatLngTuple = [number, number]
+type Coordinate = [number, number] | [number, number, number]
+
+const geometryToLatLngs = (geometry: Geometry | null | undefined): LatLngTuple[] => {
+  if (!geometry) return []
+
+  const toLatLng = (coord: Coordinate): LatLngTuple => [coord[1], coord[0]]
+
+  switch (geometry.type) {
+    case 'Point':
+      return [toLatLng(geometry.coordinates as Coordinate)]
+    case 'MultiPoint':
+      return geometry.coordinates.map((coord) => toLatLng(coord as Coordinate))
+    case 'LineString':
+      return geometry.coordinates.map((coord) => toLatLng(coord as Coordinate))
+    case 'MultiLineString':
+      return geometry.coordinates.flatMap((coords) =>
+        coords.map((coord) => toLatLng(coord as Coordinate))
+      )
+    case 'Polygon':
+      return geometry.coordinates.flatMap((ring) =>
+        ring.map((coord) => toLatLng(coord as Coordinate))
+      )
+    case 'MultiPolygon':
+      return geometry.coordinates.flatMap((polygon) =>
+        polygon.flatMap((ring) => ring.map((coord) => toLatLng(coord as Coordinate)))
+      )
+    case 'GeometryCollection':
+      return geometry.geometries.flatMap((child) => geometryToLatLngs(child))
+    default:
+      return []
+  }
+}
+
+const boundsFromTile = computed(() => {
+  if (!props.tile) return null
+  const coords = props.tile.features.flatMap((feature: Feature) =>
+    geometryToLatLngs(feature.geometry)
+  )
+  if (!coords.length) return null
+  return latLngBounds(coords as LatLngExpression[])
+})
+
+const activeBounds = computed(() =>
+  boundsFromNodes.value ?? boundsFromFacilities.value ?? boundsFromTile.value
+)
+
 const mapCenter = computed<[number, number]>(() => {
-  const currentBounds = bounds.value
+  const currentBounds = activeBounds.value
   if (currentBounds) {
     const center = currentBounds.getCenter()
     return [center.lat, center.lng]
@@ -55,23 +135,20 @@ const mapCenter = computed<[number, number]>(() => {
 
 const fitToCurrentBounds = () => {
   const map = mapInstance.value
-  const targetBounds = bounds.value
+  const targetBounds = activeBounds.value
   if (!map || !targetBounds) return
 
   const panes = map.getPanes()
-  if (!panes || !panes.mapPane) {
-    return
-  }
+  if (!panes || !panes.mapPane) return
 
   nextTick(() => {
     if (map !== mapInstance.value) return
-
     map.invalidateSize()
     map.fitBounds(targetBounds, { padding: [40, 40] })
   })
 }
 
-watch([bounds, () => mapInstance.value], () => {
+watch([activeBounds, () => mapInstance.value], () => {
   fitToCurrentBounds()
 })
 
@@ -80,9 +157,19 @@ const handleReady = (map: LeafletMap) => {
   fitToCurrentBounds()
 }
 
-const mapKey = computed(() => props.plan?.generated_at ?? `default-${props.plan?.region_id ?? 'map'}`)
+const tileSignature = computed(() => {
+  if (!props.tile) return 'no-tile'
+  const featureCount = props.tile.features?.length ?? 0
+  const extent = boundsFromTile.value?.toBBoxString() ?? 'no-bounds'
+  return `tile-${featureCount}-${extent}`
+})
+
+const mapKey = computed(
+  () => props.plan?.generated_at ?? `${props.plan?.region_id ?? 'region'}-${tileSignature.value}`
+)
 
 const hasRoute = computed(() => nodePoints.value.length > 1)
+const hasFacilities = computed(() => facilityPoints.value.length > 0)
 
 watch(
   () => mapKey.value,
@@ -105,6 +192,57 @@ onBeforeUnmount(() => {
   if (typeof window === 'undefined') return
   window.removeEventListener('resize', handleResize)
 })
+
+const geoJsonOptions: GeoJSONOptions = {
+  style: (feature) => {
+    const featureType = ((feature?.properties ?? {}) as Record<string, unknown>).feature_type
+    if (featureType === 'edge') {
+      return { color: '#94a3b8', weight: 2, opacity: 0.6 }
+    }
+    return { color: '#cbd5f5', weight: 1, opacity: 0.35 }
+  },
+  pointToLayer: (feature, latlng) => {
+    const featureType = ((feature?.properties ?? {}) as Record<string, unknown>).feature_type
+    const color = featureType === 'facility' ? '#0ea5e9' : '#6366f1'
+    return circleMarker(latlng, {
+      radius: featureType === 'facility' ? 5 : 4,
+      color,
+      weight: 1,
+      fillColor: color,
+      fillOpacity: 0.85,
+      opacity: 0.9,
+    })
+  },
+}
+
+const placeholderType = computed(() => {
+  if (props.loading) return 'loading'
+  if (!props.tile) return 'no-tile'
+  if (!hasRoute.value && !hasFacilities.value) return 'no-route'
+  return 'none'
+})
+
+const placeholderContent = computed(() => {
+  switch (placeholderType.value) {
+    case 'loading':
+      return {
+        title: '地图数据加载中',
+        copy: '正在获取基础路径与设施，请稍候…',
+      }
+    case 'no-tile':
+      return {
+        title: '暂无基础地图',
+        copy: '当前区域缺失 GeoJSON 切片，请检查数据生成流程。',
+      }
+    case 'no-route':
+      return {
+        title: '等待路线数据',
+        copy: '填写参数并点击「计算路线」，即可在地图上查看路径。',
+      }
+    default:
+      return null
+  }
+})
 </script>
 
 <template>
@@ -118,48 +256,74 @@ onBeforeUnmount(() => {
         :zoom-control="false"
         @ready="handleReady"
       >
-      <LTileLayer :url="tileUrl" :attribution="tileAttribution" />
+        <LTileLayer :url="tileUrl" :attribution="tileAttribution" />
 
-      <LPolyline
-        v-if="polylinePoints.length"
-        :lat-lngs="polylinePoints"
-        color="#2563eb"
-        :weight="5"
-        :opacity="0.9"
-        :line-cap="'round'"
-      />
+        <LGeoJson
+          v-if="props.tile"
+          :key="tileSignature"
+          :geojson="props.tile"
+          :options="geoJsonOptions"
+        />
 
-      <LCircleMarker
-        v-for="node in nodePoints"
-        :key="node.id"
-        :lat-lng="node.coords"
-        :radius="node.id === startNodeId || node.id === endNodeId ? 8 : 6"
-        :color="node.id === startNodeId ? '#16a34a' : node.id === endNodeId ? '#dc2626' : '#1d4ed8'"
-        :fill-color="node.id === startNodeId ? '#4ade80' : node.id === endNodeId ? '#f87171' : '#3b82f6'"
-        :fill-opacity="0.95"
-        :weight="2"
-      >
-        <LTooltip>
-          <div class="tooltip">
-            <span class="order">#{{ node.order }}</span>
-            <span>{{ node.label }}</span>
-          </div>
-        </LTooltip>
-      </LCircleMarker>
+        <LPolyline
+          v-if="polylinePoints.length"
+          :lat-lngs="polylinePoints"
+          color="#2563eb"
+          :weight="5"
+          :opacity="0.9"
+          :line-cap="'round'"
+        />
+
+        <LCircleMarker
+          v-for="node in nodePoints"
+          :key="node.id"
+          :lat-lng="node.coords"
+          :radius="node.id === startNodeId || node.id === endNodeId ? 8 : 6"
+          :color="node.id === startNodeId ? '#16a34a' : node.id === endNodeId ? '#dc2626' : '#1d4ed8'"
+          :fill-color="node.id === startNodeId ? '#4ade80' : node.id === endNodeId ? '#f87171' : '#3b82f6'"
+          :fill-opacity="0.95"
+          :weight="2"
+        >
+          <LTooltip>
+            <div class="tooltip">
+              <span class="order">#{{ node.order }}</span>
+              <span>{{ node.label }}</span>
+            </div>
+          </LTooltip>
+        </LCircleMarker>
+
+        <LCircleMarker
+          v-for="facility in facilityPoints"
+          :key="`facility-${facility.id}`"
+          :lat-lng="facility.coords"
+          :radius="7"
+          color="#0f766e"
+          fill-color="#14b8a6"
+          :fill-opacity="0.92"
+          :weight="2"
+        >
+          <LTooltip>
+            <div class="tooltip">
+              <span class="order facility">设施</span>
+              <span>{{ facility.label }}</span>
+              <span class="meta">直线 {{ facility.distance.toFixed(0) }}m · 预计 {{ facility.travelTime.toFixed(1) }}min</span>
+            </div>
+          </LTooltip>
+        </LCircleMarker>
       </LMap>
+
+      <transition name="placeholder-fade">
+        <div v-if="placeholderContent" class="map-placeholder">
+          <span class="placeholder-title">{{ placeholderContent.title }}</span>
+          <span class="placeholder-copy">{{ placeholderContent.copy }}</span>
+        </div>
+      </transition>
     </div>
-    <div v-if="!nodePoints.length" class="map-placeholder">
-      <span class="placeholder-title">等待路线数据</span>
-      <span class="placeholder-copy">填写参数并点击「计算路线」，即可在地图上查看路径。</span>
-    </div>
-    <div v-else-if="!hasRoute" class="map-placeholder">
-      <span class="placeholder-title">缺少完整路径</span>
-      <span class="placeholder-copy">后端尚未返回完整的节点序列。</span>
-    </div>
-    <div class="map-legend">
-      <span class="legend-item legend-start">起点</span>
-      <span class="legend-item legend-end">终点</span>
-      <span class="legend-item legend-path">路径</span>
+    <div v-if="hasRoute || hasFacilities" class="map-legend">
+      <span v-if="hasRoute" class="legend-item legend-start">起点</span>
+      <span v-if="hasRoute" class="legend-item legend-end">终点</span>
+      <span v-if="hasRoute" class="legend-item legend-path">路径</span>
+      <span v-if="hasFacilities" class="legend-item legend-facility">设施</span>
     </div>
   </div>
 </template>
@@ -213,6 +377,16 @@ onBeforeUnmount(() => {
   font-size: 0.8rem;
 }
 
+.placeholder-fade-enter-active,
+.placeholder-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.placeholder-fade-enter-from,
+.placeholder-fade-leave-to {
+  opacity: 0;
+}
+
 .map-legend {
   position: absolute;
   bottom: 16px;
@@ -257,6 +431,17 @@ onBeforeUnmount(() => {
   background-color: #3b82f6;
 }
 
+.legend-facility {
+  color: #14b8a6;
+}
+
+.legend-facility::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background-color: currentColor;
+}
+
 .tooltip {
   display: flex;
   flex-direction: column;
@@ -267,5 +452,14 @@ onBeforeUnmount(() => {
 .order {
   font-weight: 600;
   color: #1d4ed8;
+}
+
+.order.facility {
+  color: #0f766e;
+}
+
+.meta {
+  font-size: 0.7rem;
+  color: #cbd5f5;
 }
 </style>

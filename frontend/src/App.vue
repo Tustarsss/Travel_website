@@ -4,8 +4,7 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 
 const navLinks = [
   { to: '/', label: '智能推荐' },
-  { to: '/routing', label: '路线规划' },
-  { to: '/facilities', label: '设施查询' },
+  { to: '/routing', label: '出行导航' },
 ]
 
 const route = useRoute()

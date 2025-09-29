@@ -2,8 +2,13 @@ import apiClient from './apiClient'
 import type {
   FacilityCategory,
   FacilityRouteResponse,
+  MapFeatureCollection,
   RecommendationSort,
+  RegionNodeSearchResponse,
+  RegionNodeSummary,
   RegionRecommendationResponse,
+  RegionSearchResponse,
+  RegionSearchResult,
   RegionType,
   RoutePlanResponse,
   TransportMode,
@@ -35,6 +40,64 @@ export const fetchRegionRecommendations = async (
     params: queryParams,
   })
 
+  return data
+}
+
+export interface RegionSearchQuery {
+  keyword: string
+  limit?: number
+}
+
+export const searchRegions = async (
+  params: RegionSearchQuery
+): Promise<RegionSearchResult[]> => {
+  const queryParams = {
+    q: params.keyword,
+    limit: params.limit ?? 10,
+  }
+
+  const { data } = await apiClient.get<RegionSearchResponse>('/regions/search', {
+    params: queryParams,
+  })
+
+  return data.items
+}
+
+export const fetchRegionDetail = async (regionId: number): Promise<RegionSearchResult> => {
+  const { data } = await apiClient.get<RegionSearchResult>(`/regions/${regionId}`)
+  return data
+}
+
+export interface RegionNodeSearchQuery {
+  regionId: number
+  keyword: string
+  limit?: number
+}
+
+export const searchRegionNodes = async (
+  params: RegionNodeSearchQuery
+): Promise<RegionNodeSummary[]> => {
+  const { regionId, keyword, limit } = params
+  const { data } = await apiClient.get<RegionNodeSearchResponse>(
+    `/regions/${regionId}/nodes/search`,
+    {
+      params: {
+        q: keyword,
+        limit: limit ?? 10,
+      },
+    }
+  )
+
+  return data.items
+}
+
+export const fetchRegionNodeDetail = async (
+  regionId: number,
+  nodeId: number
+): Promise<RegionNodeSummary> => {
+  const { data } = await apiClient.get<RegionNodeSummary>(
+    `/regions/${regionId}/nodes/${nodeId}`
+  )
   return data
 }
 
@@ -95,5 +158,10 @@ export const fetchNearbyFacilities = async (
     params: queryParams,
   })
 
+  return data
+}
+
+export const fetchRegionMapData = async (regionId: number): Promise<MapFeatureCollection> => {
+  const { data } = await apiClient.get<MapFeatureCollection>(`/map-data/${regionId}`)
   return data
 }

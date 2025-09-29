@@ -1,4 +1,4 @@
-"""Generate synthetic dataset for the travel system."""
+"""Generate dataset for the travel system with real map data when available."""
 
 from __future__ import annotations
 
@@ -22,13 +22,19 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional random seed for reproducibility.",
     )
+    parser.add_argument(
+        "--regions",
+        type=int,
+        default=None,
+        help="Optional target number of regions to generate (defaults to project minimum).",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     print("[generate-data] Starting data generation")
-    dataset = generate_dataset(args.output, seed=args.seed)
+    dataset = generate_dataset(args.output, seed=args.seed, region_target=args.regions)
     print(
         "[generate-data] Data generation finished",
         f"regions={len(dataset['regions'])}",

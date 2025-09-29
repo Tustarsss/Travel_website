@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -41,13 +42,14 @@ async def lifespan_session() -> AsyncGenerator[AsyncSession, None]:
 		yield session
 
 
+async def init_db_async() -> None:
+	"""Ensure database tables exist using the async engine."""
+
+	async with get_async_engine().begin() as conn:
+		await conn.run_sync(SQLModel.metadata.create_all)
+
+
 def init_db() -> None:
-	"""Create database tables synchronously."""
+	"""Create database tables synchronously (for scripts/CLI)."""
 
-	import asyncio
-
-	async def _create() -> None:
-		async with get_async_engine().begin() as conn:
-			await conn.run_sync(SQLModel.metadata.create_all)
-
-	asyncio.run(_create())
+	asyncio.run(init_db_async())

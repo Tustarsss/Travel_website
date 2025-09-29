@@ -1,9 +1,8 @@
-"""Synthetic data generation utilities that satisfy project constraints."""
+"""Data generation with real map data integration that satisfy project constraints."""
 
 from __future__ import annotations
 
 import json
-import math
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,20 +12,23 @@ import numpy as np
 from faker import Faker
 
 from app.models.enums import (
-    BuildingCategory,
     DiaryMediaType,
     DiaryStatus,
-    FacilityCategory,
     RegionType,
     TransportMode,
 )
+from .map_crawler import (
+    build_graph_from_coordinates,
+    convert_osm_graph_to_components,
+    get_osm_data_for_location,
+)
+from .osm_adapter import AdaptedRegionData, RealDataUnavailableError, adapt_osm_payload
 
 faker = Faker("zh_CN")
-faker = Faker("zh_CN")
 
-MIN_REGION_COUNT = 200
-BUILDINGS_PER_REGION = (20, 28)
-FACILITIES_PER_REGION = (10, 14)
+MIN_REGION_COUNT = 5
+BUILDINGS_PER_REGION = (5, 12)
+FACILITIES_PER_REGION = (3, 6)
 USERS_COUNT = 25
 DIARIES_PER_USER = (2, 5)
 TRANSPORT_MODE_MAP = {
@@ -43,10 +45,7 @@ INTEREST_TAGS = [
     "摄影",
     "运动",
 ]
-BUILDING_CHOICES = list(BuildingCategory)
-FACILITY_CHOICES = list(FacilityCategory)
 MEDIA_TYPES = list(DiaryMediaType)
-REGION_TYPES = list(RegionType)
 
 
 @dataclass
@@ -61,22 +60,11 @@ class Counters:
     rating: int = 1
 
 
-def _random_offset() -> tuple[float, float]:
-    return (random.uniform(-0.02, 0.02), random.uniform(-0.02, 0.02))
-
-
 def _city_pool() -> Sequence[str]:
     return [
-        "北京",
-        "上海",
-        "广州",
-        "深圳",
-        "杭州",
-        "成都",
-        "重庆",
-        "武汉",
-        "西安",
-        "南京",
+        "北京", "上海", "广州", "深圳", "杭州", 
+        "成都", "重庆", "武汉", "西安", "南京",
+        "苏州", "天津", "青岛", "大连", "厦门"
     ]
 
 
@@ -92,55 +80,26 @@ def _region_name(region_type: RegionType, idx: int) -> str:
     return f"{faker.city_name()}大学{suffix}"
 
 
-def _build_graph(node_coords: List[tuple[int, float, float]], modes: List[TransportMode]) -> List[dict]:
-    if len(node_coords) < 2:
-        return []
+def _derive_region_center(adapted: AdaptedRegionData) -> tuple[float, float]:
+    coords: list[tuple[float, float]] = []
+    for item in adapted.buildings:
+        coords.append((float(item["latitude"]), float(item["longitude"])))
+    for item in adapted.facilities:
+        coords.append((float(item["latitude"]), float(item["longitude"])))
 
-    edges: List[dict] = []
-    seen_pairs: set[tuple[int, int]] = set()
-    for idx, (node_id, lat, lon) in enumerate(node_coords):
-        distances: List[tuple[float, tuple[int, float, float]]] = []
-        for other in node_coords:
-            if other[0] == node_id:
-                continue
-            distance = math.dist((lat, lon), (other[1], other[2])) * 1000
-            distances.append((distance, other))
-        distances.sort(key=lambda item: item[0])
-        for distance, (target_id, t_lat, t_lon) in distances[: min(4, len(distances))]:
-            pair_key = tuple(sorted((node_id, target_id)))
-            if pair_key in seen_pairs:
-                continue
-            seen_pairs.add(pair_key)
-            ideal_speed = random.uniform(0.8, 1.8)
-            congestion = random.uniform(0.3, 1.0)
-            payload = {
-                "distance": round(distance, 2),
-                "ideal_speed": round(ideal_speed, 2),
-                "congestion": round(congestion, 2),
-                "transport_modes": [mode.value for mode in modes],
-            }
-            edges.append(
-                {
-                    "id": None,
-                    "start_node_id": node_id,
-                    "end_node_id": target_id,
-                    **payload,
-                }
-            )
-            edges.append(
-                {
-                    "id": None,
-                    "start_node_id": target_id,
-                    "end_node_id": node_id,
-                    **payload,
-                }
-            )
-    return edges
+    if not coords:
+        raise RealDataUnavailableError("无法从真实数据中推导区域中心坐标。")
+
+    lat = sum(point[0] for point in coords) / len(coords)
+    lon = sum(point[1] for point in coords) / len(coords)
+    return round(lat, 6), round(lon, 6)
 
 
-def generate_dataset(output_dir: Path, seed: int | None = None) -> Dict[str, List[dict]]:
-    """Generate synthetic dataset and write individual JSON files."""
-
+def generate_dataset_with_real_map_data(
+    output_dir: Path, seed: int | None = None, region_target: int | None = None
+) -> Dict[str, List[dict]]:
+    """Generate dataset with only real map data from OSM."""
+    
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
@@ -158,94 +117,152 @@ def generate_dataset(output_dir: Path, seed: int | None = None) -> Dict[str, Lis
         "diary_ratings": [],
     }
 
-    print("[generator] Generating regions, buildings, facilities, and graph edges...")
-    for idx in range(MIN_REGION_COUNT):
-        region_type = random.choice(REGION_TYPES)
+    print("[generator] Generating regions with only real map data...")
+
+    known_locations = [
+        ("西湖景区", ["西湖景区", "West Lake Scenic Area, Hangzhou"], RegionType.SCENIC),
+        ("清华大学", ["清华大学", "Tsinghua University, Beijing"], RegionType.CAMPUS),
+        ("北京大学", ["北京大学", "Peking University, Beijing"], RegionType.CAMPUS),
+        ("中山大学", ["中山大学", "Sun Yat-sen University, Guangzhou"], RegionType.CAMPUS),
+    ("苏州大学", ["苏州大学", "Soochow University"], RegionType.CAMPUS),
+        ("北京颐和园", ["颐和园", "Summer Palace, Beijing"], RegionType.SCENIC),
+        ("上海外滩", ["上海外滩", "The Bund, Shanghai"], RegionType.SCENIC),
+        ("成都宽窄巷子", ["宽窄巷子", "Kuanzhai Alley, Chengdu"], RegionType.SCENIC),
+        ("西安大雁塔", ["大雁塔", "Giant Wild Goose Pagoda, Xi'an"], RegionType.SCENIC),
+        ("杭州灵隐寺", ["灵隐寺", "Lingyin Temple, Hangzhou"], RegionType.SCENIC),
+    ]
+
+    default_target = min(MIN_REGION_COUNT, len(known_locations))
+    target_region_count = max(1, region_target if region_target is not None else default_target)
+
+    if target_region_count > len(known_locations):
+        raise RealDataUnavailableError(
+            f"需要 {target_region_count} 个真实区域，但仅配置 {len(known_locations)} 个地点。请扩充地点列表。"
+        )
+
+    for idx in range(target_region_count):
         region_id = counters.region
-        counters.region += 1
+        display_name, queries, region_type = known_locations[idx]
+
+        osm_data = None
+        for query in queries:
+            osm_data = get_osm_data_for_location(query)
+            if osm_data:
+                break
+        if osm_data is None:
+            raise RealDataUnavailableError("未能获取 OSM 数据。", location=display_name)
+
+        min_buildings = random.randint(*BUILDINGS_PER_REGION)
+        min_facilities = random.randint(*FACILITIES_PER_REGION)
+        adapted: AdaptedRegionData = adapt_osm_payload(
+            osm_data,
+            region_id,
+            region_type,
+            min_buildings,
+            min_facilities,
+            location=display_name,
+        )
+
+        bounds = osm_data.get("bounds")
+        if bounds is not None and len(bounds) == 4:
+            min_lat, min_lon, max_lat, max_lon = bounds
+            center_lat = round((min_lat + max_lat) / 2, 6)
+            center_lon = round((min_lon + max_lon) / 2, 6)
+        else:
+            center_lat, center_lon = _derive_region_center(adapted)
+
         popularity = random.randint(30, 100)
         rating = round(random.uniform(2.5, 5.0), 1)
-        base_lat = float(faker.latitude())
-        base_lon = float(faker.longitude())
-        region_lat = round(base_lat, 6)
-        region_lon = round(base_lon, 6)
         region = {
             "id": region_id,
-            "name": _region_name(region_type, region_id),
+            "name": display_name,
             "type": region_type.value,
             "popularity": popularity,
             "rating": rating,
             "description": faker.text(max_nb_chars=120),
             "city": _pick_city(idx),
-            "latitude": region_lat,
-            "longitude": region_lon,
+            "latitude": center_lat,
+            "longitude": center_lon,
         }
         dataset["regions"].append(region)
 
-        node_coordinates: List[tuple[int, float, float]] = []
-
-        building_count = random.randint(*BUILDINGS_PER_REGION)
-        for _ in range(building_count):
-            lat_off, lon_off = _random_offset()
-            building = {
+        for building in adapted.buildings:
+            new_building = {
+                **building,
                 "id": counters.building,
                 "region_id": region_id,
-                "name": faker.street_name(),
-                "category": random.choice(BUILDING_CHOICES).value,
-                "latitude": round(base_lat + lat_off, 6),
-                "longitude": round(base_lon + lon_off, 6),
             }
-            dataset["buildings"].append(building)
-            node = {
-                "id": counters.node,
-                "region_id": region_id,
-                "name": building["name"],
-                "latitude": building["latitude"],
-                "longitude": building["longitude"],
-                "building_id": building["id"],
-                "facility_id": None,
-                "is_virtual": False,
-            }
-            dataset["graph_nodes"].append(node)
-            node_coordinates.append((counters.node, node["latitude"], node["longitude"]))
-            counters.node += 1
+            dataset["buildings"].append(new_building)
+
             counters.building += 1
 
-        facility_count = random.randint(*FACILITIES_PER_REGION)
-        for _ in range(facility_count):
-            lat_off, lon_off = _random_offset()
-            facility = {
+        for facility in adapted.facilities:
+            new_facility = {
+                **facility,
                 "id": counters.facility,
                 "region_id": region_id,
-                "name": faker.company_suffix() + faker.street_suffix(),
-                "category": random.choice(FACILITY_CHOICES).value,
-                "latitude": round(base_lat + lat_off, 6),
-                "longitude": round(base_lon + lon_off, 6),
             }
-            dataset["facilities"].append(facility)
-            node = {
-                "id": counters.node,
-                "region_id": region_id,
-                "name": facility["name"],
-                "latitude": facility["latitude"],
-                "longitude": facility["longitude"],
-                "building_id": None,
-                "facility_id": facility["id"],
-                "is_virtual": False,
-            }
-            dataset["graph_nodes"].append(node)
-            node_coordinates.append((counters.node, node["latitude"], node["longitude"]))
-            counters.node += 1
+            dataset["facilities"].append(new_facility)
             counters.facility += 1
 
-        modes = TRANSPORT_MODE_MAP[region_type]
-        edges = _build_graph(node_coordinates, modes)
-        for edge in edges:
-            edge["id"] = counters.edge
-            edge["region_id"] = region_id
-            dataset["graph_edges"].append(edge)
-            counters.edge += 1
+        graph_nodes_payload, graph_edges_payload = convert_osm_graph_to_components(
+            osm_data.get("graph"), region_type
+        )
 
+        if len(graph_nodes_payload) < 2 or not graph_edges_payload:
+            fallback_coordinates: List[tuple[float, float]] = [
+                (float(item["latitude"]), float(item["longitude"]))
+                for item in [*adapted.buildings, *adapted.facilities]
+            ]
+            graph_nodes_payload, graph_edges_payload = build_graph_from_coordinates(
+                fallback_coordinates,
+                region_type,
+            )
+
+        if len(graph_nodes_payload) < 2 or not graph_edges_payload:
+            raise RealDataUnavailableError("无法构建足够的路径路网节点。", location=display_name)
+
+        node_id_lookup: List[int] = []
+        for node_index, node_payload in enumerate(graph_nodes_payload):
+            node_id = counters.node
+            counters.node += 1
+            dataset["graph_nodes"].append(
+                {
+                    "id": node_id,
+                    "region_id": region_id,
+                    "name": node_payload.get("name")
+                    or f"路口-{region_id}-{node_index + 1}",
+                    "latitude": node_payload["latitude"],
+                    "longitude": node_payload["longitude"],
+                    "building_id": None,
+                    "facility_id": None,
+                    "is_virtual": False,
+                }
+            )
+            node_id_lookup.append(node_id)
+
+        for edge_payload in graph_edges_payload:
+            dataset["graph_edges"].append(
+                {
+                    "id": counters.edge,
+                    "region_id": region_id,
+                    "start_node_id": node_id_lookup[edge_payload["source_index"]],
+                    "end_node_id": node_id_lookup[edge_payload["target_index"]],
+                    "distance": edge_payload["distance"],
+                    "ideal_speed": edge_payload["ideal_speed"],
+                    "congestion": edge_payload["congestion"],
+                    "transport_modes": edge_payload["transport_modes"],
+                }
+            )
+            counters.edge += 1
+        counters.region += 1
+
+    if len(dataset["regions"]) < target_region_count:
+        raise RealDataUnavailableError(
+            f"仅生成 {len(dataset['regions'])} 个真实区域，未达到要求的 {target_region_count} 个。"
+        )
+
+    print(f"[generator] total regions ready: {len(dataset['regions'])}")
     print("[generator] Generating users and diaries...")
     interest_pool = list(INTEREST_TAGS)
     for _ in range(USERS_COUNT):
@@ -323,3 +340,10 @@ def generate_dataset(output_dir: Path, seed: int | None = None) -> Dict[str, Lis
     )
 
     return dataset
+
+
+def generate_dataset(
+    output_dir: Path, seed: int | None = None, region_target: int | None = None
+) -> Dict[str, List[dict]]:
+    """Generate synthetic dataset and write individual JSON files."""
+    return generate_dataset_with_real_map_data(output_dir, seed, region_target)
