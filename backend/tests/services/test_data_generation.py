@@ -90,11 +90,6 @@ def test_generate_dataset_writes_expected_files(
         "convert_osm_graph_to_components",
         lambda graph, region_type: (graph_nodes_stub, graph_edges_stub),
     )
-    monkeypatch.setattr(
-        generator,
-        "build_graph_from_coordinates",
-        lambda coords, region_type: (graph_nodes_stub, graph_edges_stub),
-    )
 
     dataset = generator.generate_dataset(tmp_path, seed=7)
 
@@ -111,8 +106,28 @@ def test_generate_dataset_writes_expected_files(
         assert (tmp_path / f"{key}.json").exists()
     # Ensure the real-data fetch pipeline was invoked for each region.
     assert len(call_tracker) == region_count
-    # Routing nodes should be intersections without facility/building bindings.
-    assert all(node["building_id"] is None and node["facility_id"] is None for node in dataset["graph_nodes"])
+    # Graph should now contain dedicated junctions and virtual site bindings with connectors.
+    junction_node_ids = {
+        node["id"]
+        for node in dataset["graph_nodes"]
+        if node["building_id"] is None and node["facility_id"] is None
+    }
+    binding_node_ids = {
+        node["id"]
+        for node in dataset["graph_nodes"]
+        if node["building_id"] is not None or node["facility_id"] is not None
+    }
+
+    assert junction_node_ids, "Expected at least one junction node in the graph"
+    assert binding_node_ids, "Expected building/facility bindings to be present"
+
+    adjacency: dict[int, set[int]] = {}
+    for edge in dataset["graph_edges"]:
+        adjacency.setdefault(edge["start_node_id"], set()).add(edge["end_node_id"])
+
+    for binding_node_id in binding_node_ids:
+        connected = adjacency.get(binding_node_id, set())
+        assert connected & junction_node_ids, "Each site binding must connect to at least one junction node"
 
 
 def test_generate_dataset_requires_real_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

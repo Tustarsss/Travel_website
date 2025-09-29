@@ -24,11 +24,12 @@ async def list_map_tiles(
 @router.get("/{region_id}", response_model=Dict[str, Any])
 async def get_map_tile(
     region_id: int,
+    include_roads: bool = True,
     service: MapDataService = Depends(deps.get_map_data_service),
 ) -> Dict[str, Any]:
     """Return the GeoJSON feature collection for a region."""
 
     try:
-        return await service.load_tile(region_id)
+        return await service.load_tile(region_id, include_roads=include_roads)
     except MapTileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

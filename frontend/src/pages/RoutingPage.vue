@@ -368,9 +368,7 @@ watch(
   facilities,
   (value) => {
     hydrateFacilityForm(value)
-    if (!facilityData.value && typeof window !== 'undefined') {
-      void executeFacilities(buildFacilityPayload(value))
-    }
+    // 不再自动执行设施查询，避免不必要的请求
   },
   { immediate: true }
 )
@@ -547,7 +545,7 @@ const applyRouteContextToFacilities = (value: RoutePlanResponse | null) => {
 
 watch(plan, (value) => {
   if (value) {
-    applyRouteContextToFacilities(value)
+    // 不再在这里调用 applyRouteContextToFacilities，避免重复
     void ensureMapData(value.region_id)
   }
 })
@@ -558,14 +556,9 @@ watch(facilityResults, (value) => {
   }
 })
 
-watch(syncFacilityWithRoute, (value) => {
-  if (value) {
-    facilityForm.regionId = routeForm.regionId
-    facilityForm.originNodeId = routeForm.startNodeId
-    selectedFacilityRegion.value = selectedRegion.value
-    selectedFacilityOrigin.value = selectedStartNode.value
-    applyRouteContextToFacilities(plan.value)
-  }
+watch(syncFacilityWithRoute, () => {
+  // 不再自动同步设施参数，避免不必要的触发
+  // 用户手动规划路线时会调用 applyRouteContextToFacilities
 })
 
 function buildRoutePayload(): RoutePlanQuery {
@@ -609,7 +602,7 @@ const submitRoute = async () => {
     })
     applyRouteContextToFacilities(result)
     await ensureMapData(result.region_id)
-    if (syncFacilityWithRoute.value && facilityData.value) {
+    if (syncFacilityWithRoute.value) {
       await runFacilitySearch({ persist: false })
     }
   } catch {
@@ -944,40 +937,9 @@ const handleFacilitySubmit = async () => {
                 {{ TRANSPORT_MODE_LABELS[mode as TransportMode] ?? mode }}
               </span>
             </div>
-            <div class="detail-panels">
-              <div>
-                <h4>节点序列</h4>
-                <ol>
-                  <li v-for="(node, index) in plan.nodes" :key="node.id">
-                    <span class="badge">{{ index + 1 }}</span>
-                    <div>
-                      <strong>{{ node.name ?? `节点 ${node.id}` }}</strong>
-                      <small>({{ node.latitude.toFixed(6) }}, {{ node.longitude.toFixed(6) }})</small>
-                    </div>
-                  </li>
-                </ol>
-              </div>
-              <div>
-                <h4>路段详情</h4>
-                <ul>
-                  <li
-                    v-for="segment in plan.segments"
-                    :key="`${segment.source_id}-${segment.target_id}-${segment.transport_mode}`"
-                  >
-                    <div class="segment-head">
-                      <span>{{ segment.source_id }} → {{ segment.target_id }}</span>
-                      <span class="chip">
-                        {{ TRANSPORT_MODE_LABELS[segment.transport_mode as TransportMode] ?? segment.transport_mode }}
-                      </span>
-                    </div>
-                    <div class="segment-meta">
-                      <span>距离 {{ segment.distance.toFixed(2) }} km</span>
-                      <span>时间 {{ segment.time.toFixed(2) }} min</span>
-                    </div>
-                  </li>
-                </ul>
-              </div>
-            </div>
+            <p class="route-hint">
+              详细节点与路段信息已绘制在地图上；不同交通方式会以对应颜色高亮，便于快速识别步行、骑行或电瓶车路段。
+            </p>
           </template>
           <template v-else>
             <EmptyState
@@ -1317,31 +1279,14 @@ const handleFacilitySubmit = async () => {
   color: #475569;
 }
 
-.detail-panels {
-  display: grid;
-  gap: 1rem;
-}
-
-.detail-panels h4 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 0.65rem;
-}
-
-.detail-panels ol {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.detail-panels li {
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
-  padding: 0.65rem 0.8rem;
+.route-hint {
+  margin-top: 1.5rem;
+  padding: 0.9rem 1rem;
   border-radius: 1rem;
-  background: rgba(248, 250, 252, 0.8);
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  line-height: 1.6;
+  font-size: 0.88rem;
 }
 
 .badge {
@@ -1355,38 +1300,6 @@ const handleFacilitySubmit = async () => {
   color: #1d4ed8;
   font-size: 0.75rem;
   font-weight: 600;
-}
-
-.detail-panels ul {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.detail-panels li ul,
-.detail-panels li dl {
-  margin: 0;
-}
-
-.detail-panels li ul li {
-  background: transparent;
-}
-
-.segment-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.85rem;
-  color: #1f2937;
-}
-
-.segment-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  font-size: 0.75rem;
-  color: #64748b;
-  margin-top: 0.35rem;
 }
 
 .facility-list {
@@ -1455,7 +1368,6 @@ const handleFacilitySubmit = async () => {
   color: #475569;
 }
 
-.segment-meta span::before,
 .facility-list dd span::before {
   content: '';
 }

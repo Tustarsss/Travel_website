@@ -4,31 +4,31 @@
       "region_id": 1,
       "name": "西湖景区",
       "tile": "region_1.geojson",
-      "updated_at": "2025-09-29T11:08:07.638847+00:00"
+      "updated_at": "2025-09-29T15:13:04.412638+00:00"
     },
     {
       "region_id": 2,
       "name": "清华大学",
       "tile": "region_2.geojson",
-      "updated_at": "2025-09-29T11:08:07.638847+00:00"
+      "updated_at": "2025-09-29T15:13:04.412638+00:00"
     },
     {
       "region_id": 3,
       "name": "北京大学",
       "tile": "region_3.geojson",
-      "updated_at": "2025-09-29T11:08:07.638847+00:00"
+      "updated_at": "2025-09-29T15:13:04.412638+00:00"
     },
     {
       "region_id": 4,
       "name": "中山大学",
       "tile": "region_4.geojson",
-      "updated_at": "2025-09-29T11:08:07.638847+00:00"
+      "updated_at": "2025-09-29T15:13:04.412638+00:00"
     },
     {
       "region_id": 5,
       "name": "苏州大学",
       "tile": "region_5.geojson",
-      "updated_at": "2025-09-29T11:08:07.638847+00:00"
+      "updated_at": "2025-09-29T15:13:04.412638+00:00"
     }
   ]
 }

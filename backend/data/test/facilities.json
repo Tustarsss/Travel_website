@@ -1,0 +1,138 @@
+[
+  {
+    "id": 1,
+    "region_id": 1,
+    "name": "中国红军第四军医院旧址",
+    "category": "service",
+    "latitude": 26.587811,
+    "longitude": 114.136368
+  },
+  {
+    "id": 2,
+    "region_id": 1,
+    "name": "井冈百竹园",
+    "category": "service",
+    "latitude": 26.583764,
+    "longitude": 114.125241
+  },
+  {
+    "id": 3,
+    "region_id": 1,
+    "name": "红军造币厂",
+    "category": "service",
+    "latitude": 26.584588,
+    "longitude": 114.124993
+  },
+  {
+    "id": 4,
+    "region_id": 1,
+    "name": "龙潭风景区",
+    "category": "service",
+    "latitude": 26.595679,
+    "longitude": 114.138874
+  },
+  {
+    "id": 5,
+    "region_id": 1,
+    "name": "桐木岭哨口工事",
+    "category": "service",
+    "latitude": 26.622545,
+    "longitude": 114.199248
+  },
+  {
+    "id": 6,
+    "region_id": 1,
+    "name": "石燕洞风景区",
+    "category": "service",
+    "latitude": 26.602869,
+    "longitude": 114.212325
+  },
+  {
+    "id": 7,
+    "region_id": 1,
+    "name": "五马朝天景区",
+    "category": "service",
+    "latitude": 26.550666,
+    "longitude": 114.175406
+  },
+  {
+    "id": 8,
+    "region_id": 1,
+    "name": "客家缘民宿",
+    "category": "service",
+    "latitude": 26.591948,
+    "longitude": 114.168118
+  },
+  {
+    "id": 9,
+    "region_id": 1,
+    "name": "井冈山自然保护区",
+    "category": "service",
+    "latitude": 26.56391,
+    "longitude": 114.170328
+  },
+  {
+    "id": 10,
+    "region_id": 1,
+    "name": "Facility 10",
+    "category": "parking",
+    "latitude": 26.584122,
+    "longitude": 114.124864
+  },
+  {
+    "id": 11,
+    "region_id": 1,
+    "name": "Facility 11",
+    "category": "parking",
+    "latitude": 26.593114,
+    "longitude": 114.138406
+  },
+  {
+    "id": 12,
+    "region_id": 1,
+    "name": "Facility 12",
+    "category": "parking",
+    "latitude": 26.554616,
+    "longitude": 114.126417
+  },
+  {
+    "id": 13,
+    "region_id": 1,
+    "name": "井冈山风景名胜区",
+    "category": "service",
+    "latitude": 26.618255,
+    "longitude": 114.181691
+  },
+  {
+    "id": 14,
+    "region_id": 1,
+    "name": "Facility 14",
+    "category": "parking",
+    "latitude": 26.571853,
+    "longitude": 114.173999
+  },
+  {
+    "id": 15,
+    "region_id": 1,
+    "name": "中信井冈山会议中心",
+    "category": "service",
+    "latitude": 26.596372,
+    "longitude": 114.208042
+  },
+  {
+    "id": 16,
+    "region_id": 1,
+    "name": "胜利的号角",
+    "category": "service",
+    "latitude": 26.62764,
+    "longitude": 114.204325
+  },
+  {
+    "id": 17,
+    "region_id": 1,
+    "name": "Facility 17",
+    "category": "parking",
+    "latitude": 26.627803,
+    "longitude": 114.204121
+  }
+]

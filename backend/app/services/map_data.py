@@ -55,7 +55,7 @@ class MapDataService:
 
         return summaries
 
-    async def load_tile(self, region_id: int) -> Dict[str, Any]:
+    async def load_tile(self, region_id: int, include_roads: bool = True) -> Dict[str, Any]:
         if region_id <= 0:
             raise MapTileNotFoundError("Region id must be positive")
 
@@ -70,6 +70,15 @@ class MapDataService:
 
         if not isinstance(payload, dict) or payload.get("type") != "FeatureCollection":
             raise MapTileNotFoundError(f"GeoJSON tile for region {region_id} is malformed")
+
+        # Filter out road features if include_roads is False
+        if not include_roads:
+            features = payload.get("features", [])
+            filtered_features = [
+                feature for feature in features
+                if feature.get("properties", {}).get("feature_type") != "edge"
+            ]
+            payload["features"] = filtered_features
 
         return payload
 

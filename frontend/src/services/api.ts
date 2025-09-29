@@ -161,7 +161,14 @@ export const fetchNearbyFacilities = async (
   return data
 }
 
-export const fetchRegionMapData = async (regionId: number): Promise<MapFeatureCollection> => {
-  const { data } = await apiClient.get<MapFeatureCollection>(`/map-data/${regionId}`)
+export const fetchRegionMapData = async (
+  regionId: number,
+  includeRoads: boolean = false
+): Promise<MapFeatureCollection> => {
+  const { data } = await apiClient.get<MapFeatureCollection>(`/map-data/${regionId}`, {
+    params: {
+      include_roads: includeRoads,
+    },
+  })
   return data
 }

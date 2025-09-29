@@ -19,6 +19,7 @@ const props = withDefaults(
     facilities?: FacilityRouteItem[]
     initialCenter?: [number, number]
     initialZoom?: number
+    showRoads?: boolean
   }>(),
   {
     plan: null,
@@ -27,6 +28,7 @@ const props = withDefaults(
     facilities: () => [],
     initialCenter: () => [39.9042, 116.4074] as [number, number],
     initialZoom: 14,
+    showRoads: false,
   }
 )
 
@@ -35,8 +37,21 @@ const tileAttribution = '地图数据 © OpenStreetMap 贡献者'
 
 const mapInstance = ref<LeafletMap | null>(null)
 
-const nodePoints = computed(() =>
-  (props.plan?.nodes ?? [])
+const nodeMap = computed(() =>
+  new Map(
+    (props.plan?.nodes ?? [])
+      .filter((node) => Number.isFinite(node.latitude) && Number.isFinite(node.longitude))
+      .map((node) => [node.id, node])
+  )
+)
+
+const nodePoints = computed((): Array<{
+  id: number
+  label: string
+  coords: [number, number]
+  order: number
+}> => {
+  const allNodes = (props.plan?.nodes ?? [])
     .filter((node) => Number.isFinite(node.latitude) && Number.isFinite(node.longitude))
     .map((node, index) => ({
       id: node.id,
@@ -44,9 +59,10 @@ const nodePoints = computed(() =>
       coords: [node.latitude, node.longitude] as [number, number],
       order: index + 1,
     }))
-)
 
-const polylinePoints = computed(() => nodePoints.value.map((node) => node.coords))
+  // 显示所有路线节点（起始点、目标点、途径路线上的所有节点）
+  return allNodes
+})
 const startNodeId = computed(() => nodePoints.value[0]?.id ?? null)
 const endNodeId = computed(() => nodePoints.value[nodePoints.value.length - 1]?.id ?? null)
 
@@ -70,11 +86,73 @@ const boundsFromNodes = computed(() => {
   return latLngBounds(nodePoints.value.map((point) => point.coords) as LatLngExpression[])
 })
 
+const MODE_STYLES: Record<string, { color: string; weight: number }> = {
+  walk: { color: '#2563eb', weight: 5 },
+  bike: { color: '#ea580c', weight: 5 },
+  electric_cart: { color: '#9333ea', weight: 5 },
+}
+
+const segmentPolylines = computed(() => {
+  if (!props.plan) return []
+
+  return (props.plan.segments ?? [])
+    .map((segment, index) => {
+      const start = nodeMap.value.get(segment.source_id)
+      const end = nodeMap.value.get(segment.target_id)
+      if (!start || !end) return null
+
+      const mode = segment.transport_mode?.toLowerCase?.() ?? 'walk'
+      const style = MODE_STYLES[mode] ?? { color: '#2563eb', weight: 5 }
+
+      return {
+        key: `${segment.source_id}-${segment.target_id}-${mode}-${index}`,
+        coords: [
+          [start.latitude, start.longitude] as [number, number],
+          [end.latitude, end.longitude] as [number, number],
+        ],
+        color: style.color,
+        weight: style.weight,
+        mode,
+      }
+    })
+    .filter((segment): segment is {
+      key: string
+      coords: [number, number][]
+      color: string
+      weight: number
+      mode: string
+    } => Boolean(segment))
+})
+
+const legendModes = computed(() => {
+  const unique = new Map<string, { color: string; label: string }>()
+  for (const segment of segmentPolylines.value) {
+    if (unique.has(segment.mode)) continue
+    const style = MODE_STYLES[segment.mode] ?? { color: '#2563eb', weight: 5 }
+    const label =
+      segment.mode === 'bike'
+        ? '骑行'
+        : segment.mode === 'electric_cart'
+          ? '电瓶车'
+          : '步行'
+    unique.set(segment.mode, { color: style.color, label })
+  }
+  return Array.from(unique.entries()).map(([mode, meta]) => ({ mode, ...meta }))
+})
+
 const boundsFromFacilities = computed(() => {
   if (!facilityPoints.value.length) {
     return null
   }
   return latLngBounds(facilityPoints.value.map((point) => point.coords) as LatLngExpression[])
+})
+
+const filteredTile = computed(() => {
+  if (!props.tile) return undefined
+  if (props.showRoads) return props.tile
+
+  // 当不显示道路时，不显示任何地图要素
+  return undefined
 })
 
 type LatLngTuple = [number, number]
@@ -112,8 +190,8 @@ const geometryToLatLngs = (geometry: Geometry | null | undefined): LatLngTuple[]
 }
 
 const boundsFromTile = computed(() => {
-  if (!props.tile) return null
-  const coords = props.tile.features.flatMap((feature: Feature) =>
+  if (!filteredTile.value) return null
+  const coords = filteredTile.value.features.flatMap((feature: Feature) =>
     geometryToLatLngs(feature.geometry)
   )
   if (!coords.length) return null
@@ -168,7 +246,7 @@ const mapKey = computed(
   () => props.plan?.generated_at ?? `${props.plan?.region_id ?? 'region'}-${tileSignature.value}`
 )
 
-const hasRoute = computed(() => nodePoints.value.length > 1)
+const hasRoute = computed(() => segmentPolylines.value.length > 0)
 const hasFacilities = computed(() => facilityPoints.value.length > 0)
 
 watch(
@@ -259,19 +337,20 @@ const placeholderContent = computed(() => {
         <LTileLayer :url="tileUrl" :attribution="tileAttribution" />
 
         <LGeoJson
-          v-if="props.tile"
+          v-if="filteredTile"
           :key="tileSignature"
-          :geojson="props.tile"
+          :geojson="filteredTile"
           :options="geoJsonOptions"
         />
 
         <LPolyline
-          v-if="polylinePoints.length"
-          :lat-lngs="polylinePoints"
-          color="#2563eb"
-          :weight="5"
-          :opacity="0.9"
-          :line-cap="'round'"
+          v-for="segment in segmentPolylines"
+          :key="segment.key"
+          :lat-lngs="segment.coords"
+          :color="segment.color"
+          :weight="segment.weight"
+          :opacity="0.95"
+          line-cap="round"
         />
 
         <LCircleMarker
@@ -322,7 +401,16 @@ const placeholderContent = computed(() => {
     <div v-if="hasRoute || hasFacilities" class="map-legend">
       <span v-if="hasRoute" class="legend-item legend-start">起点</span>
       <span v-if="hasRoute" class="legend-item legend-end">终点</span>
-      <span v-if="hasRoute" class="legend-item legend-path">路径</span>
+      <template v-if="legendModes.length">
+        <span
+          v-for="legend in legendModes"
+          :key="legend.mode"
+          class="legend-item legend-mode"
+          :style="{ '--legend-color': legend.color }"
+        >
+          {{ legend.label }}
+        </span>
+      </template>
       <span v-if="hasFacilities" class="legend-item legend-facility">设施</span>
     </div>
   </div>
@@ -413,7 +501,7 @@ const placeholderContent = computed(() => {
   width: 10px;
   height: 10px;
   border-radius: 9999px;
-  background-color: currentColor;
+  background-color: var(--legend-color, currentColor);
 }
 
 .legend-start {
@@ -424,11 +512,14 @@ const placeholderContent = computed(() => {
   color: #ef4444;
 }
 
-.legend-path::before {
+.legend-mode {
+  color: var(--legend-color, #2563eb);
+}
+
+.legend-mode::before {
   width: 18px;
   height: 4px;
   border-radius: 9999px;
-  background-color: #3b82f6;
 }
 
 .legend-facility {

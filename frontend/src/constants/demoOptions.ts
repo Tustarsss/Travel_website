@@ -19,36 +19,36 @@ export const SAMPLE_REGION_OPTIONS = [
 
 export const SAMPLE_ROUTING_COMBINATIONS = [
   {
-    label: '重庆景区-001：节点 1 → 25',
+    label: '西湖景区：节点 1 → 25',
     regionId: 1,
     startNodeId: 1,
     endNodeId: 25,
   },
   {
-    label: '重庆景区-001：节点 3 → 18',
+    label: '西湖景区：节点 3 → 50',
     regionId: 1,
     startNodeId: 3,
-    endNodeId: 18,
+    endNodeId: 50,
   },
   {
-    label: '太原大学-002：节点 120 → 150',
+    label: '清华大学：节点 961 → 980',
     regionId: 2,
-    startNodeId: 120,
-    endNodeId: 150,
+    startNodeId: 961,
+    endNodeId: 980,
   },
 ]
 
 export const SAMPLE_FACILITY_QUERIES = [
   {
-    label: '重庆景区-001 · 起点 1 · 半径 600m',
+    label: '西湖景区 · 起点 1 · 半径 600m',
     regionId: 1,
     originNodeId: 1,
     radius: 600,
   },
   {
-    label: '太原大学-002 · 起点 120 · 半径 400m',
+    label: '清华大学 · 起点 961 · 半径 400m',
     regionId: 2,
-    originNodeId: 120,
+    originNodeId: 961,
     radius: 400,
   },
 ]

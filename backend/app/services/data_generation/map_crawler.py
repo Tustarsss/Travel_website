@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import random
 from typing import Dict, List, Optional, Tuple
+
 from app.models.enums import BuildingCategory, FacilityCategory, RegionType, TransportMode
 
 try:
@@ -143,7 +144,7 @@ def get_osm_data_for_location(location_name: str) -> Optional[Dict]:
 
         # Get street network
         try:
-            G = ox.graph_from_place(location_name, network_type="walk")
+            G = ox.graph_from_place(location_name, network_type="walk", simplify=False)
         except Exception as e:
             print(f"No street network found for {location_name}: {e}")
             G = None

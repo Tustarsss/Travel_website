@@ -178,6 +178,8 @@ def export_geojson_tiles(dataset_dir: Path) -> None:
                 node_type = "building"
             elif node.get("facility_id"):
                 node_type = "facility"
+            elif not node.get("is_virtual", False):
+                node_type = "junction"
 
             features.append(
                 {

@@ -1,0 +1,66 @@
+[
+  {
+    "id": 1,
+    "region_id": 1,
+    "name": "Building 1",
+    "category": "other",
+    "latitude": 26.502778,
+    "longitude": 114.160058
+  },
+  {
+    "id": 2,
+    "region_id": 1,
+    "name": "Building 2",
+    "category": "other",
+    "latitude": 26.502932,
+    "longitude": 114.160116
+  },
+  {
+    "id": 3,
+    "region_id": 1,
+    "name": "Building 3",
+    "category": "other",
+    "latitude": 26.502784,
+    "longitude": 114.160229
+  },
+  {
+    "id": 4,
+    "region_id": 1,
+    "name": "杜鹃山索道上站",
+    "category": "other",
+    "latitude": 26.502773,
+    "longitude": 114.160378
+  },
+  {
+    "id": 5,
+    "region_id": 1,
+    "name": "Building 5",
+    "category": "other",
+    "latitude": 26.502569,
+    "longitude": 114.160176
+  },
+  {
+    "id": 6,
+    "region_id": 1,
+    "name": "大井毛泽东旧居",
+    "category": "other",
+    "latitude": 26.565477,
+    "longitude": 114.124261
+  },
+  {
+    "id": 7,
+    "region_id": 1,
+    "name": "中信井冈山会议中心",
+    "category": "other",
+    "latitude": 26.596372,
+    "longitude": 114.208042
+  },
+  {
+    "id": 8,
+    "region_id": 1,
+    "name": "Building 8",
+    "category": "other",
+    "latitude": 26.596226,
+    "longitude": 114.20793
+  }
+]
