@@ -79,6 +79,12 @@ const applySample = (index: number) => {
   form.endNodeId = sample.endNodeId
 }
 
+const swapNodes = () => {
+  const { startNodeId, endNodeId } = form
+  form.startNodeId = endNodeId
+  form.endNodeId = startNodeId
+}
+
 const resetRouting = () => {
   const defaults = createRoutingDefaults()
   preferencesStore.updateRouting(defaults)
@@ -154,6 +160,13 @@ const allowedModes = computed(() => plan.value?.allowed_transport_modes ?? [])
             :disabled="loading"
           >
             {{ loading ? '规划中…' : '计算路线' }}
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-primary/50 hover:text-primary"
+            @click="swapNodes"
+          >
+            交换起终点
           </button>
           <button
             type="button"

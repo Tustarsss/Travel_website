@@ -16,6 +16,14 @@ uv sync --all-extras
 uv run uvicorn app.main:app --reload
 ```
 
+By default the API允许来自 Vite 开发服务器 (`http://localhost:5173`、`http://127.0.0.1:5173`) 的跨域请求。若需要与其他域名联调，可在项目根目录 `.env` 中配置：
+
+```bash
+CORS_ALLOWED_ORIGINS="http://your-frontend-host,http://another-host"
+```
+
+多个地址使用逗号分隔。
+
 3. Execute tests:
 
 ```bash
