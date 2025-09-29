@@ -5,20 +5,23 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-  "typecheck": "npm run typecheck:app && npm run typecheck:node",
-  "typecheck:app": "vue-tsc --noEmit -p tsconfig.app.json",
-  "typecheck:node": "vue-tsc --noEmit -p tsconfig.node.json",
+    "typecheck": "npm run typecheck:app && npm run typecheck:node",
+    "typecheck:app": "vue-tsc --noEmit -p tsconfig.app.json",
+    "typecheck:node": "vue-tsc --noEmit -p tsconfig.node.json",
     "bundle": "vite build",
     "build": "npm run typecheck && npm run bundle",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vue-leaflet/vue-leaflet": "^0.10.1",
     "axios": "^1.12.2",
+    "leaflet": "^1.9.4",
     "pinia": "^3.0.3",
     "vue": "^3.5.21",
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.20",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",
     "autoprefixer": "^10.4.21",

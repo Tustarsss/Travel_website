@@ -5,6 +5,7 @@ import PageSection from '../components/ui/PageSection.vue'
 import ErrorAlert from '../components/ui/ErrorAlert.vue'
 import LoadingIndicator from '../components/ui/LoadingIndicator.vue'
 import EmptyState from '../components/ui/EmptyState.vue'
+import RouteMap from '../components/map/RouteMap.vue'
 import { fetchRoutePlan } from '../services/api'
 import type { RoutePlanResponse, TransportMode, WeightStrategy } from '../types/api'
 import { SAMPLE_ROUTING_COMBINATIONS, TRANSPORT_MODE_LABELS } from '../constants/demoOptions'
@@ -177,6 +178,13 @@ const allowedModes = computed(() => plan.value?.allowed_transport_modes ?? [])
           </button>
         </div>
       </form>
+    </PageSection>
+
+    <PageSection
+      title="路线地图"
+      description="无论是否已经规划路线，都可在地图上查看默认底图；生成结果后会自动高亮路径与节点。"
+    >
+      <RouteMap :plan="plan" />
     </PageSection>
 
     <PageSection title="路线详情" description="当找到有效路径时，将展示节点顺序、路段信息及总距离/时间。">
