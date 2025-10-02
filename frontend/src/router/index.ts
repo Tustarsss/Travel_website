@@ -16,7 +16,12 @@ const router = createRouter({
     {
       path: '/facilities',
       name: 'facilities',
-      redirect: '/routing',
+      component: () => import('../pages/FacilitiesPage.vue'),
+    },
+    {
+      path: '/diaries',
+      name: 'diaries',
+      component: () => import('../pages/DiariesPage.vue'),
     },
     {
       path: '/:pathMatch(.*)*',

@@ -135,104 +135,128 @@ const totalCount = computed(() => data.value?.total_candidates ?? 0)
 <template>
   <div class="space-y-6">
     <PageSection
-      title="智能区域推荐"
-      description="根据兴趣标签、搜索关键词和区域类型自动生成个性化目的地列表。"
+      title="旅游目的地推荐"
+      description="按照旅游热度、评价和个人兴趣选择旅游目的地，支持关键词查询和多维度排序。"
     >
-      <form class="grid gap-4 md:grid-cols-2" @submit.prevent="runQuery">
-        <label class="flex flex-col gap-2 text-sm font-medium text-slate-600">
-          搜索关键词
-          <input
-            v-model="form.search"
-            type="text"
-            placeholder="输入城市、景点或关键字"
-          />
-        </label>
+      <form class="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg" @submit.prevent="runQuery">
+        <div class="grid gap-5 md:grid-cols-2">
+          <label class="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            <span class="flex items-center gap-2">
+              🔍 搜索关键词
+            </span>
+            <input
+              v-model="form.search"
+              type="text"
+              placeholder="输入城市、景点或关键字"
+              class="rounded-xl border-2 border-slate-200 px-4 py-2.5 transition focus:border-primary"
+            />
+          </label>
 
-        <label class="flex flex-col gap-2 text-sm font-medium text-slate-600">
-          推荐数量
-          <input v-model.number="form.limit" type="number" min="1" max="50" />
-        </label>
+          <label class="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            <span class="flex items-center gap-2">
+              📊 推荐数量
+            </span>
+            <input 
+              v-model.number="form.limit" 
+              type="number" 
+              min="1" 
+              max="50" 
+              class="rounded-xl border-2 border-slate-200 px-4 py-2.5 transition focus:border-primary"
+            />
+          </label>
 
-        <label class="flex flex-col gap-2 text-sm font-medium text-slate-600">
-          排序方式
-          <select v-model="form.sortBy">
-            <option v-for="option in sortOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
+          <label class="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            <span class="flex items-center gap-2">
+              📈 排序方式
+            </span>
+            <select v-model="form.sortBy" class="rounded-xl border-2 border-slate-200 px-4 py-2.5 transition focus:border-primary">
+              <option v-for="option in sortOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
 
-        <label class="flex flex-col gap-2 text-sm font-medium text-slate-600">
-          区域类型
-          <select v-model="form.regionType">
-            <option v-for="option in regionTypeOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
-        </label>
+          <label class="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+            <span class="flex items-center gap-2">
+              🏷️ 区域类型
+            </span>
+            <select v-model="form.regionType" class="rounded-xl border-2 border-slate-200 px-4 py-2.5 transition focus:border-primary">
+              <option v-for="option in regionTypeOptions" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </label>
 
-        <label class="flex flex-col gap-2 text-sm font-medium text-slate-600 md:col-span-2">
-          兴趣标签
-          <textarea
-            v-model="form.interestsText"
-            rows="2"
-            placeholder="以逗号、空格或换行分隔，例如：美食、自然、文化"
-          />
-          <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span>快捷选择：</span>
-            <button
-              v-for="interest in INTEREST_SUGGESTIONS"
-              :key="interest"
-              type="button"
-              class="rounded-full border px-3 py-1"
-              :class="
-                interestList.includes(interest)
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-slate-200 bg-white text-slate-600 hover:border-primary/60 hover:text-primary'
-              "
-              @click="toggleInterest(interest)"
-            >
-              {{ interest }}
-            </button>
+          <div class="flex flex-col gap-3 md:col-span-2">
+            <label class="text-sm font-semibold text-slate-700">
+              <span class="flex items-center gap-2">
+                💡 兴趣标签
+              </span>
+            </label>
+            <textarea
+              v-model="form.interestsText"
+              rows="2"
+              placeholder="以逗号、空格或换行分隔，例如：美食、自然、文化"
+              class="rounded-xl border-2 border-slate-200 px-4 py-3 transition focus:border-primary"
+            />
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-xs font-medium text-slate-500">快捷选择：</span>
+              <button
+                v-for="interest in INTEREST_SUGGESTIONS"
+                :key="interest"
+                type="button"
+                class="rounded-full border-2 px-3 py-1.5 text-xs font-medium transition-all"
+                :class="
+                  interestList.includes(interest)
+                    ? 'border-primary bg-primary text-white shadow-md shadow-primary/30'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-primary hover:text-primary'
+                "
+                @click="toggleInterest(interest)"
+              >
+                {{ interest }}
+              </button>
+            </div>
           </div>
-        </label>
 
-        <label class="flex items-center gap-3 text-sm font-medium text-slate-600">
-          <input v-model="form.interestsOnly" type="checkbox" class="h-4 w-4" />
-          只显示匹配兴趣的区域
-        </label>
+          <label class="flex items-center gap-3 text-sm font-semibold text-slate-700 md:col-span-2">
+            <input v-model="form.interestsOnly" type="checkbox" class="h-5 w-5 rounded border-2 border-slate-300 text-primary focus:ring-2 focus:ring-primary/30" />
+            <span>只显示匹配兴趣的区域</span>
+          </label>
 
-        <div class="flex flex-col gap-2 text-xs text-slate-500 md:col-span-2">
-          <span class="font-medium text-slate-600">快速示例</span>
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="sample in SAMPLE_REGION_OPTIONS"
-              :key="sample.id"
-              type="button"
-              class="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 hover:border-primary/60 hover:text-primary"
-              @click="applyRegionSample(sample.id)"
-            >
-              {{ sample.name }} · {{ sample.type === 'scenic' ? '景区' : '校园' }} · #{{ sample.id }}
-            </button>
+          <div class="flex flex-col gap-3 rounded-xl bg-slate-50 p-4 md:col-span-2">
+            <span class="text-xs font-semibold text-slate-600">⚡ 快速示例</span>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="sample in SAMPLE_REGION_OPTIONS"
+                :key="sample.id"
+                type="button"
+                class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-sm transition hover:border-primary hover:text-primary hover:shadow"
+                @click="applyRegionSample(sample.id)"
+              >
+                {{ sample.name }} · {{ sample.type === 'scenic' ? '🏞️' : '🏫' }} · #{{ sample.id }}
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div class="flex items-center gap-3 md:col-span-2">
-          <button
-            type="submit"
-            class="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-primary/90"
-            :disabled="loading"
-          >
-            {{ loading ? '加载中…' : '获取推荐' }}
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-primary/50 hover:text-primary"
-            @click="resetFilters"
-          >
-            重置条件
-          </button>
-          <span v-if="hasActiveFilters" class="text-xs text-slate-400">已应用筛选条件，可点击重置恢复默认。</span>
+          <div class="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5 md:col-span-2">
+            <button
+              type="submit"
+              class="rounded-xl bg-gradient-to-r from-primary to-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-primary/30 transition hover:shadow-xl hover:shadow-primary/40 disabled:from-slate-300 disabled:to-slate-400 disabled:shadow-none"
+              :disabled="loading"
+            >
+              {{ loading ? '🔄 加载中…' : '🚀 获取推荐' }}
+            </button>
+            <button
+              type="button"
+              class="rounded-xl border-2 border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition hover:border-primary hover:text-primary"
+              @click="resetFilters"
+            >
+              🔄 重置条件
+            </button>
+            <span v-if="hasActiveFilters" class="text-xs font-medium text-slate-500">
+              ✓ 已应用筛选条件
+            </span>
+          </div>
         </div>
       </form>
     </PageSection>
@@ -264,36 +288,61 @@ const totalCount = computed(() => data.value?.total_candidates ?? 0)
           <div>返回数量：{{ sortedItems.length }} / {{ totalCount }}</div>
         </div>
 
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div class="grid gap-5 lg:grid-cols-2">
           <article
             v-for="item in sortedItems"
             :key="item.region.id"
-            class="flex h-full flex-col justify-between rounded-2xl border border-slate-200 bg-white/90 p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+            class="group relative flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl"
           >
-            <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <div>
-                  <h3 class="text-lg font-semibold text-slate-900">{{ item.region.name }}</h3>
-                  <p class="text-xs text-slate-400">ID：{{ item.region.id }} · {{ item.region.city ?? '未知城市' }}</p>
+            <!-- 装饰性渐变背景 -->
+            <div class="absolute right-0 top-0 h-32 w-32 -translate-y-8 translate-x-8 rounded-full bg-gradient-to-br from-primary/5 to-blue-500/10 blur-3xl transition-transform group-hover:scale-150"></div>
+            
+            <div class="relative space-y-4">
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex-1">
+                  <h3 class="text-xl font-bold text-slate-900 transition group-hover:text-primary">
+                    {{ item.region.name }}
+                  </h3>
+                  <p class="mt-1 text-xs text-slate-500">
+                    <span class="font-medium">ID: {{ item.region.id }}</span>
+                    <span class="mx-2">·</span>
+                    <span>{{ item.region.city ?? '未知城市' }}</span>
+                  </p>
                 </div>
-                <span class="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                  {{ item.region.type === 'scenic' ? '景区' : '校园' }}
+                <span class="flex-shrink-0 rounded-xl bg-gradient-to-br from-primary/10 to-blue-500/10 px-4 py-2 text-xs font-bold text-primary shadow-sm">
+                  {{ item.region.type === 'scenic' ? '🏞️ 景区' : '🏫 校园' }}
                 </span>
               </div>
-              <p class="text-sm text-slate-600">
-                评分 {{ item.region.rating.toFixed(1) }} · 人气 {{ item.region.popularity }}
-              </p>
-              <p v-if="item.region.description" class="text-sm text-slate-500 leading-relaxed">
-                {{ item.region.description }}
+
+              <div class="flex items-center gap-4 text-sm">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-yellow-500">⭐</span>
+                  <span class="font-semibold text-slate-700">{{ item.region.rating.toFixed(1) }}</span>
+                  <span class="text-slate-400">评分</span>
+                </div>
+                <div class="h-4 w-px bg-slate-200"></div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-red-500">🔥</span>
+                  <span class="font-semibold text-slate-700">{{ item.region.popularity }}</span>
+                  <span class="text-slate-400">人气</span>
+                </div>
+              </div>
+
+              <p v-if="item.region.description" class="text-sm leading-relaxed text-slate-600">
+                {{ item.region.description.length > 100 ? item.region.description.slice(0, 100) + '...' : item.region.description }}
               </p>
             </div>
 
-            <div class="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span class="rounded-full bg-slate-100 px-2 py-1">匹配度 {{ item.score.toFixed(2) }}</span>
-              <span class="rounded-full bg-slate-100 px-2 py-1">基础分 {{ item.base_score.toFixed(2) }}</span>
+            <div class="relative mt-5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+              <span class="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
+                匹配度 {{ item.score.toFixed(2) }}
+              </span>
+              <span class="rounded-lg bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
+                基础分 {{ item.base_score.toFixed(2) }}
+              </span>
               <template v-if="item.interest_matches.length">
-                <span v-for="tag in item.interest_matches" :key="tag" class="rounded-full bg-emerald-100 px-2 py-1 text-emerald-600">
-                  匹配 {{ tag }}
+                <span v-for="tag in item.interest_matches" :key="tag" class="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                  ✓ {{ tag }}
                 </span>
               </template>
             </div>

@@ -54,8 +54,8 @@ class FacilityService:
         radius_meters: float | None = 500.0,
         limit: int = 10,
         strategy: WeightStrategy | str = WeightStrategy.DISTANCE,
-    categories: Sequence[FacilityCategory | str] | None = None,
-    transport_modes: Sequence[TransportMode | str] | None = None,
+        categories: Sequence[FacilityCategory | str] | None = None,
+        transport_modes: Sequence[TransportMode | str] | None = None,
     ) -> list[FacilityRoute]:
         """Return facilities reachable from an origin node ordered by travel metric."""
 
@@ -80,20 +80,24 @@ class FacilityService:
 
         weight_strategy = WeightStrategy(strategy)
 
-        results: list[FacilityRoute] = []
-        for facility, node in facility_nodes:
-            try:
-                plan = await self._routing_service.compute_route(
-                    region_id=region_id,
-                    start_node_id=origin_node_id,
-                    end_node_id=node.id,
-                    strategy=weight_strategy,
-                    transport_modes=transport_modes,
-                )
-            except RouteNotFoundError:
-                continue
+        # 使用 BFS 一次性计算从起点到所有可达节点的距离和路径
+        # 这比为每个设施单独计算路径高效得多
+        reachable_paths = await self._routing_service.compute_reachable_nodes(
+            region_id=region_id,
+            origin_node_id=origin_node_id,
+            max_distance=radius_meters,
+            strategy=weight_strategy,
+            transport_modes=transport_modes,
+        )
 
-            if radius_meters is not None and plan.total_distance > radius_meters:
+        # 构建设施节点ID到设施的映射
+        facility_by_node_id = {node.id: facility for facility, node in facility_nodes}
+
+        # 提取在可达范围内的设施
+        results: list[FacilityRoute] = []
+        for node_id, path_info in reachable_paths.items():
+            facility = facility_by_node_id.get(node_id)
+            if facility is None:
                 continue
 
             results.append(
@@ -103,18 +107,20 @@ class FacilityService:
                     category=facility.category,
                     latitude=facility.latitude,
                     longitude=facility.longitude,
-                    distance=plan.total_distance,
-                    travel_time=plan.total_time,
-                    node_sequence=tuple(node.id for node in plan.nodes),
+                    distance=path_info["distance"],
+                    travel_time=path_info["time"],
+                    node_sequence=tuple(path_info["path"]),
                     strategy=weight_strategy,
                 )
             )
 
+        # 排序
         if weight_strategy is WeightStrategy.DISTANCE:
             results.sort(key=lambda item: item.distance)
         else:
             results.sort(key=lambda item: item.travel_time)
 
+        # 限制返回数量
         if limit > 0:
             results = results[:limit]
 

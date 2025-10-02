@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Iterable, Sequence
+from collections import deque
+import heapq
 
 from app.algorithms import Edge as AlgoEdge
 from app.algorithms import PathResult, PathSegment as AlgoPathSegment, WeightStrategy, shortest_path
@@ -62,6 +65,24 @@ class RoutingService:
     def __init__(self, graph_repository: GraphRepository, region_repository: RegionRepository) -> None:
         self._graph_repository = graph_repository
         self._region_repository = region_repository
+        # 缓存边数据和节点数据，避免重复加载
+        self._edges_cache: dict[int, list] = {}
+        self._nodes_cache: dict[int, GraphNode] = {}
+
+    async def _get_edges_cached(self, region_id: int) -> list:
+        """获取边数据（带缓存）。"""
+        if region_id not in self._edges_cache:
+            edges = await self._graph_repository.list_edges_by_region(region_id)
+            self._edges_cache[region_id] = edges
+        return self._edges_cache[region_id]
+    
+    async def _get_node_cached(self, node_id: int) -> GraphNode | None:
+        """获取节点数据（带缓存）。"""
+        if node_id not in self._nodes_cache:
+            node = await self._graph_repository.get_node(node_id)
+            if node:
+                self._nodes_cache[node_id] = node
+        return self._nodes_cache.get(node_id)
 
     async def compute_route(
         self,
@@ -78,7 +99,8 @@ class RoutingService:
 
         start_node, end_node = await self._fetch_and_validate_nodes(region_id, start_node_id, end_node_id)
 
-        edges = await self._graph_repository.list_edges_by_region(region_id)
+        # 使用缓存的边数据
+        edges = await self._get_edges_cached(region_id)
         if not edges:
             raise RouteNotFoundError(f"Region {region_id} has no routing edges")
 
@@ -110,11 +132,140 @@ class RoutingService:
             segments=route_segments,
         )
 
+    async def compute_reachable_nodes(
+        self,
+        *,
+        region_id: int,
+        origin_node_id: int,
+        max_distance: float | None = None,
+        strategy: WeightStrategy | str = WeightStrategy.DISTANCE,
+        transport_modes: Sequence[TransportMode | str] | None = None,
+    ) -> dict[int, dict[str, any]]:
+        """
+        使用 BFS 从起点计算所有可达节点的距离和路径。
+        
+        返回格式: {
+            node_id: {
+                "distance": float,  # 路径距离（米）
+                "time": float,      # 旅行时间（分钟）
+                "path": [node_ids], # 节点ID序列
+            }
+        }
+        """
+        region = await self._region_repository.get_region(region_id)
+        if region is None:
+            raise RegionNotFoundError(f"Region {region_id} does not exist")
+
+        origin_node = await self._get_node_cached(origin_node_id)
+        if origin_node is None or origin_node.region_id != region_id:
+            raise NodeValidationError("Origin node must exist within the specified region")
+
+        # 加载图数据
+        edges = await self._get_edges_cached(region_id)
+        if not edges:
+            return {}
+
+        allowed_modes = self._resolve_transport_modes(region.type, transport_modes)
+        weight_strategy = WeightStrategy(strategy)
+
+        # 构建邻接表
+        graph: dict[int, list[tuple[int, float, float]]] = {}  # node_id -> [(neighbor_id, distance, time)]
+        for edge in edges:
+            # 检查交通方式是否允许
+            edge_modes = set(edge.transport_modes or [])
+            if not edge_modes.intersection(allowed_modes):
+                continue
+
+            distance = edge.distance
+            time = distance / (edge.ideal_speed * edge.congestion / 60)  # 转换为分钟
+
+            # 双向边
+            if edge.start_node_id not in graph:
+                graph[edge.start_node_id] = []
+            if edge.end_node_id not in graph:
+                graph[edge.end_node_id] = []
+            
+            graph[edge.start_node_id].append((edge.end_node_id, distance, time))
+            graph[edge.end_node_id].append((edge.start_node_id, distance, time))
+
+        # 使用 Dijkstra 算法进行遍历（优先队列确保最短路径）
+        visited: dict[int, dict] = {}  # node_id -> {distance, time, path, parent}
+        distances: dict[int, float] = {origin_node_id: 0.0}
+        times: dict[int, float] = {origin_node_id: 0.0}
+        parents: dict[int, int | None] = {origin_node_id: None}
+        
+        # 优先队列: (priority, node_id, distance, time)
+        # priority 根据策略选择（距离或时间）
+        if weight_strategy == WeightStrategy.DISTANCE:
+            heap = [(0.0, origin_node_id, 0.0, 0.0)]
+        else:
+            heap = [(0.0, origin_node_id, 0.0, 0.0)]
+        
+        processed = set()
+
+        while heap:
+            priority, current_id, current_distance, current_time = heapq.heappop(heap)
+
+            # 如果已处理过，跳过
+            if current_id in processed:
+                continue
+            
+            processed.add(current_id)
+
+            # 检查距离限制
+            if max_distance is not None and current_distance > max_distance:
+                continue
+
+            # 遍历邻居节点
+            neighbors = graph.get(current_id, [])
+            for neighbor_id, edge_distance, edge_time in neighbors:
+                if neighbor_id in processed:
+                    continue
+
+                new_distance = current_distance + edge_distance
+                new_time = current_time + edge_time
+
+                # 检查是否找到更短路径
+                if neighbor_id not in distances or new_distance < distances[neighbor_id]:
+                    distances[neighbor_id] = new_distance
+                    times[neighbor_id] = new_time
+                    parents[neighbor_id] = current_id
+                    
+                    # 根据策略选择优先级
+                    priority = new_distance if weight_strategy == WeightStrategy.DISTANCE else new_time
+                    heapq.heappush(heap, (priority, neighbor_id, new_distance, new_time))
+
+        # 重建路径
+        for node_id in distances:
+            if node_id == origin_node_id:
+                visited[node_id] = {
+                    "distance": 0.0,
+                    "time": 0.0,
+                    "path": [origin_node_id],
+                }
+            else:
+                # 从父节点回溯构建路径
+                path = []
+                current = node_id
+                while current is not None:
+                    path.append(current)
+                    current = parents.get(current)
+                path.reverse()
+                
+                visited[node_id] = {
+                    "distance": distances[node_id],
+                    "time": times[node_id],
+                    "path": path,
+                }
+
+        return visited
+
     async def _fetch_and_validate_nodes(
         self, region_id: int, start_node_id: int, end_node_id: int
     ) -> tuple[GraphNode, GraphNode]:
-        start_node = await self._graph_repository.get_node(start_node_id)
-        end_node = await self._graph_repository.get_node(end_node_id)
+        # 使用缓存获取节点
+        start_node = await self._get_node_cached(start_node_id)
+        end_node = await self._get_node_cached(end_node_id)
 
         if start_node is None or end_node is None:
             missing = []
@@ -131,8 +282,24 @@ class RoutingService:
 
     async def _build_node_map(self, region_id: int, node_ids: Iterable[str]) -> dict[int, GraphNode]:
         unique_ids = {int(node_id) for node_id in node_ids}
-        nodes = await self._graph_repository.get_nodes(sorted(unique_ids))
-        mapping = {node.id: node for node in nodes}
+        
+        # 先从缓存中获取
+        mapping = {}
+        uncached_ids = []
+        for node_id in unique_ids:
+            cached_node = self._nodes_cache.get(node_id)
+            if cached_node:
+                mapping[node_id] = cached_node
+            else:
+                uncached_ids.append(node_id)
+        
+        # 批量获取未缓存的节点
+        if uncached_ids:
+            nodes = await self._graph_repository.get_nodes(sorted(uncached_ids))
+            for node in nodes:
+                mapping[node.id] = node
+                self._nodes_cache[node.id] = node  # 缓存新获取的节点
+        
         if len(mapping) != len(unique_ids):
             missing = unique_ids - mapping.keys()
             raise NodeValidationError(f"Missing nodes in region {region_id}: {sorted(missing)}")
