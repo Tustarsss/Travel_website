@@ -48,6 +48,15 @@ async def init_db_async() -> None:
 	async with get_async_engine().begin() as conn:
 		await conn.run_sync(SQLModel.metadata.create_all)
 
+	# Initialize FTS5 tables after main tables are created
+	from app.algorithms.diary_search import get_diary_search_service
+	from app.core.db import get_session_maker
+
+	maker = get_session_maker()
+	async with maker() as session:
+		search_service = get_diary_search_service(session)
+		await search_service.initialize_fts_table()
+
 
 def init_db() -> None:
 	"""Create database tables synchronously (for scripts/CLI)."""

@@ -9,6 +9,25 @@ from .search import (
 	RegionSearchResponse,
 	RegionSearchResult,
 )
+from .diary import (
+	DiaryCreateRequest,
+	DiaryUpdateRequest,
+	DiaryListItem,
+	DiaryDetail,
+	DiaryCreateResponse,
+	DiaryRatingRequest,
+	DiaryRatingResponse,
+	DiaryViewRequest,
+	DiaryRecommendationItem,
+	DiaryRecommendationResponse,
+	DiarySearchResult,
+	DiarySearchResponse,
+	AnimationGenerateRequest,
+	DiaryAnimationResponse,
+	DiaryListParams,
+	UserSummary as DiaryUserSummary,
+	RegionSummary as DiaryRegionSummary,
+)
 
 __all__ = [
 	"RegionRecommendationItem",
@@ -23,4 +42,22 @@ __all__ = [
 	"RegionSearchResponse",
 	"RegionNodeSummary",
 	"RegionNodeSearchResponse",
+	# Diary schemas
+	"DiaryCreateRequest",
+	"DiaryUpdateRequest",
+	"DiaryListItem",
+	"DiaryDetail",
+	"DiaryCreateResponse",
+	"DiaryRatingRequest",
+	"DiaryRatingResponse",
+	"DiaryViewRequest",
+	"DiaryRecommendationItem",
+	"DiaryRecommendationResponse",
+	"DiarySearchResult",
+	"DiarySearchResponse",
+	"AnimationGenerateRequest",
+	"DiaryAnimationResponse",
+	"DiaryListParams",
+	"DiaryUserSummary",
+	"DiaryRegionSummary",
 ]

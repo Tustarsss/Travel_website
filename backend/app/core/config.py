@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     database_url: str = "sqlite+aiosqlite:///./data/travel.db"
+    redis_url: str = "redis://localhost:6379"
+    cache_ttl: int = 300  # 5 minutes default TTL
     cors_allowed_origins: list[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",

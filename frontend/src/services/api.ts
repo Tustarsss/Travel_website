@@ -172,3 +172,167 @@ export const fetchRegionMapData = async (
   })
   return data
 }
+
+// ===== Diary API Functions =====
+
+import type {
+  DiarySortBy,
+  DiaryListResponse,
+  DiaryRecommendationParams,
+  DiaryRecommendationResponse,
+  DiaryCreateRequest,
+  DiaryCreateResponse,
+  DiaryUpdateRequest,
+  DiaryDetail,
+  DiaryRatingRequest,
+  DiaryRatingResponse,
+  AnimationGenerateRequest,
+  DiaryAnimation,
+} from '../types/diary'
+
+/**
+ * Get personalized diary recommendations
+ */
+export const fetchDiaryRecommendations = async (
+  params: DiaryRecommendationParams = {}
+): Promise<DiaryRecommendationResponse> => {
+  const queryParams = {
+    limit: params.limit ?? 10,
+    sort_by: params.sort_by ?? 'hybrid',
+    interests: params.interests && params.interests.length > 0 ? params.interests : undefined,
+    region_id: params.region_id ?? undefined,
+  }
+
+  const { data } = await apiClient.get<DiaryRecommendationResponse>(
+    '/diaries/recommendations',
+    { params: queryParams }
+  )
+
+  return data
+}
+
+/**
+ * Search diaries using full-text search
+ */
+export const searchDiaries = async (
+  query: string,
+  params: {
+    limit?: number
+    sort_by?: DiarySortBy
+    interests?: string[]
+    region_id?: number
+  } = {}
+): Promise<DiaryListResponse> => {
+  const queryParams = {
+    q: query,
+    limit: params.limit ?? 20,
+    sort_by: params.sort_by ?? 'hybrid',
+    interests: params.interests && params.interests.length > 0 ? params.interests : undefined,
+    region_id: params.region_id ?? undefined,
+  }
+
+  const { data } = await apiClient.get<DiaryListResponse>('/diaries/search', {
+    params: queryParams,
+  })
+
+  return data
+}
+
+/**
+ * Get diary detail by ID
+ */
+export const fetchDiaryDetail = async (diaryId: number): Promise<DiaryDetail> => {
+  const { data } = await apiClient.get<DiaryDetail>(`/diaries/${diaryId}`)
+  return data
+}
+
+/**
+ * Create a new diary
+ */
+export const createDiary = async (
+  request: DiaryCreateRequest
+): Promise<DiaryCreateResponse> => {
+  const { data } = await apiClient.post<DiaryCreateResponse>('/diaries', request)
+  return data
+}
+
+/**
+ * Update an existing diary
+ */
+export const updateDiary = async (
+  diaryId: number,
+  request: DiaryUpdateRequest
+): Promise<DiaryDetail> => {
+  const { data } = await apiClient.put<DiaryDetail>(`/diaries/${diaryId}`, request)
+  return data
+}
+
+/**
+ * Delete a diary
+ */
+export const deleteDiary = async (diaryId: number): Promise<void> => {
+  await apiClient.delete(`/diaries/${diaryId}`)
+}
+
+/**
+ * Record a diary view
+ */
+export const recordDiaryView = async (diaryId: number): Promise<void> => {
+  await apiClient.post(`/diaries/${diaryId}/view`)
+}
+
+/**
+ * Rate a diary
+ */
+export const rateDiary = async (
+  diaryId: number,
+  request: DiaryRatingRequest
+): Promise<DiaryRatingResponse> => {
+  const { data } = await apiClient.post<DiaryRatingResponse>(
+    `/diaries/${diaryId}/rate`,
+    request
+  )
+  return data
+}
+
+/**
+ * Generate animation for a diary using AIGC
+ */
+export const generateDiaryAnimation = async (
+  diaryId: number,
+  request: AnimationGenerateRequest = {}
+): Promise<DiaryAnimation> => {
+  const { data } = await apiClient.post<DiaryAnimation>(
+    `/diaries/${diaryId}/generate-animation`,
+    request
+  )
+  return data
+}
+
+/**
+ * Get all animations for a diary
+ */
+export const fetchDiaryAnimations = async (diaryId: number): Promise<DiaryAnimation[]> => {
+  const { data } = await apiClient.get<DiaryAnimation[]>(`/diaries/${diaryId}/animations`)
+  return data
+}
+
+/**
+ * Get user's diaries
+ */
+export const fetchUserDiaries = async (
+  userId: number,
+  params: { page?: number; page_size?: number; status?: string } = {}
+): Promise<DiaryListResponse> => {
+  const queryParams = {
+    page: params.page ?? 1,
+    page_size: params.page_size ?? 10,
+    status: params.status ?? undefined,
+  }
+
+  const { data } = await apiClient.get<DiaryListResponse>(`/diaries/users/${userId}/diaries`, {
+    params: queryParams,
+  })
+
+  return data
+}

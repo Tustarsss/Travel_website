@@ -30,8 +30,8 @@ def _stub_region_payload(region_id: int, min_buildings: int, min_facilities: int
 
 
 @pytest.mark.parametrize(
-    "region_count, buildings_range, facilities_range, users_count",
-    [(3, (2, 3), (1, 2), 4)],
+    "region_count, buildings_range, facilities_range",
+    [(3, (2, 3), (1, 2))],
 )
 def test_generate_dataset_writes_expected_files(
     tmp_path: Path,
@@ -39,15 +39,12 @@ def test_generate_dataset_writes_expected_files(
     region_count: int,
     buildings_range: tuple[int, int],
     facilities_range: tuple[int, int],
-    users_count: int,
 ) -> None:
     """Generation should honour patched configuration and create JSON outputs from real-data pipeline."""
 
     monkeypatch.setattr(generator, "MIN_REGION_COUNT", region_count)
     monkeypatch.setattr(generator, "BUILDINGS_PER_REGION", buildings_range)
     monkeypatch.setattr(generator, "FACILITIES_PER_REGION", facilities_range)
-    monkeypatch.setattr(generator, "USERS_COUNT", users_count)
-    monkeypatch.setattr(generator, "DIARIES_PER_USER", (1, 2))
 
     call_tracker: list[int] = []
 
@@ -93,16 +90,19 @@ def test_generate_dataset_writes_expected_files(
 
     dataset = generator.generate_dataset(tmp_path, seed=7)
 
+    expected_keys = {"regions", "buildings", "facilities", "graph_nodes", "graph_edges"}
+    assert set(dataset.keys()) == expected_keys
+
     assert len(dataset["regions"]) == region_count
     assert len(dataset["buildings"]) >= region_count * buildings_range[0]
     assert len(dataset["facilities"]) >= region_count * facilities_range[0]
-    assert len(dataset["users"]) == users_count
     assert len(dataset["graph_nodes"]) > 0
     assert len(dataset["graph_edges"]) > 0
-    assert len(dataset["diaries"]) > 0
+    assert "users" not in dataset
+    assert "diaries" not in dataset
 
     # All collections should have been flushed to disk for downstream import scripts.
-    for key in dataset:
+    for key in expected_keys:
         assert (tmp_path / f"{key}.json").exists()
     # Ensure the real-data fetch pipeline was invoked for each region.
     assert len(call_tracker) == region_count
@@ -189,6 +189,33 @@ def test_validate_dataset_detects_violations(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
+    (dataset_dir / "graph_nodes.json").write_text(
+        json.dumps(
+            [
+                {
+                    "id": 1,
+                    "region_id": 1,
+                    "name": "节点1",
+                    "latitude": 0.0,
+                    "longitude": 0.0,
+                    "building_id": None,
+                    "facility_id": None,
+                    "is_virtual": False,
+                },
+                {
+                    "id": 2,
+                    "region_id": 1,
+                    "name": "节点2",
+                    "latitude": 0.001,
+                    "longitude": 0.001,
+                    "building_id": None,
+                    "facility_id": None,
+                    "is_virtual": False,
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
     (dataset_dir / "graph_edges.json").write_text(
         json.dumps(
             [
@@ -201,20 +228,6 @@ def test_validate_dataset_detects_violations(tmp_path: Path) -> None:
                     "ideal_speed": 1.0,
                     "congestion": 0.5,
                     "transport_modes": ["walk"],
-                }
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (dataset_dir / "users.json").write_text(
-        json.dumps(
-            [
-                {
-                    "id": 1,
-                    "username": "tester",
-                    "display_name": "Tester",
-                    "email": "tester@example.com",
-                    "interests": ["自然"],
                 }
             ]
         ),

@@ -24,6 +24,17 @@ const router = createRouter({
       component: () => import('../pages/DiariesPage.vue'),
     },
     {
+      path: '/diaries/new',
+      name: 'diary-create',
+      component: () => import('../pages/DiaryEditorPage.vue'),
+    },
+    {
+      path: '/diaries/:id',
+      name: 'diary-detail',
+      component: () => import('../pages/DiaryDetailPage.vue'),
+      props: true,
+    },
+    {
       path: '/:pathMatch(.*)*',
       redirect: '/',
     },

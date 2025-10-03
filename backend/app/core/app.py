@@ -29,6 +29,13 @@ def create_app() -> FastAPI:
     async def _ensure_database() -> None:
         await init_db_async()
 
+        # Start background task services
+        from ..services.task_service import scheduled_service
+        import asyncio
+
+        # Start scheduled task service in background
+        asyncio.create_task(scheduled_service.start())
+
     app.include_router(get_api_router(), prefix=settings.api_prefix)
 
     return app

@@ -13,8 +13,6 @@ import numpy as np
 from faker import Faker
 
 from app.models.enums import (
-    DiaryMediaType,
-    DiaryStatus,
     RegionType,
     TransportMode,
 )
@@ -29,24 +27,10 @@ faker = Faker("zh_CN")
 MIN_REGION_COUNT = 5
 BUILDINGS_PER_REGION = (5, 12)
 FACILITIES_PER_REGION = (3, 6)
-USERS_COUNT = 25
-DIARIES_PER_USER = (2, 5)
 TRANSPORT_MODE_MAP = {
     RegionType.SCENIC: [TransportMode.WALK, TransportMode.ELECTRIC_CART],
     RegionType.CAMPUS: [TransportMode.WALK, TransportMode.BIKE],
 }
-INTEREST_TAGS = [
-    "自然",
-    "历史",
-    "科教",
-    "美食",
-    "艺术",
-    "亲子",
-    "摄影",
-    "运动",
-]
-MEDIA_TYPES = list(DiaryMediaType)
-
 CONNECTOR_NEAREST_JUNCTIONS = 3
 CONNECTOR_MIN_DISTANCE_METERS = 8.0
 CONNECTOR_CONGESTION = 0.9
@@ -88,9 +72,6 @@ class Counters:
     facility: int = 1
     node: int = 1
     edge: int = 1
-    user: int = 1
-    diary: int = 1
-    rating: int = 1
 
 
 def _city_pool() -> Sequence[str]:
@@ -145,9 +126,6 @@ def generate_dataset_with_real_map_data(
         "facilities": [],
         "graph_nodes": [],
         "graph_edges": [],
-        "users": [],
-        "diaries": [],
-        "diary_ratings": [],
     }
 
     print("[generator] Generating regions with only real map data...")
@@ -331,62 +309,6 @@ def generate_dataset_with_real_map_data(
         )
 
     print(f"[generator] total regions ready: {len(dataset['regions'])}")
-    print("[generator] Generating users and diaries...")
-    interest_pool = list(INTEREST_TAGS)
-    for _ in range(USERS_COUNT):
-        user_id = counters.user
-        counters.user += 1
-        interests = random.sample(interest_pool, k=random.randint(2, 4))
-        dataset["users"].append(
-            {
-                "id": user_id,
-                "username": faker.user_name() + str(random.randint(100, 999)),
-                "display_name": faker.name(),
-                "email": faker.email(),
-                "interests": interests,
-            }
-        )
-
-        diaries_to_create = random.randint(*DIARIES_PER_USER)
-        for _ in range(diaries_to_create):
-            region = random.choice(dataset["regions"])
-            diary_id = counters.diary
-            counters.diary += 1
-            max_media = min(3, len(MEDIA_TYPES))
-            media_count = random.randint(1, max_media)
-            media_types = random.sample(MEDIA_TYPES, k=media_count)
-            dataset["diaries"].append(
-                {
-                    "id": diary_id,
-                    "user_id": user_id,
-                    "region_id": region["id"],
-                    "title": faker.sentence(nb_words=6),
-                    "summary": faker.sentence(nb_words=12),
-                    "content": "\n".join(faker.paragraphs(nb=random.randint(3, 6))),
-                    "compressed_content": None,
-                    "media_urls": [faker.image_url() for _ in range(media_count)],
-                    "media_types": [media_type.value for media_type in media_types],
-                    "tags": random.sample(interest_pool, k=random.randint(1, 3)),
-                    "popularity": random.randint(10, 500),
-                    "rating": round(random.uniform(3.0, 5.0), 1),
-                    "ratings_count": random.randint(1, 120),
-                    "status": DiaryStatus.PUBLISHED.value,
-                }
-            )
-
-            rating_count = random.randint(2, 6)
-            for _ in range(rating_count):
-                dataset["diary_ratings"].append(
-                    {
-                        "id": counters.rating,
-                        "diary_id": diary_id,
-                        "user_id": random.randint(1, USERS_COUNT),
-                        "score": random.randint(3, 5),
-                        "comment": faker.sentence(nb_words=10),
-                    }
-                )
-                counters.rating += 1
-
     print("[generator] Writing JSON files to", str(output_dir))
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -403,8 +325,8 @@ def generate_dataset_with_real_map_data(
         f"buildings={len(dataset['buildings'])}",
         f"facilities={len(dataset['facilities'])}",
         f"edges={len(dataset['graph_edges'])}",
-        f"users={len(dataset['users'])}",
-        f"diaries={len(dataset['diaries'])}",
+        f"graph_nodes={len(dataset['graph_nodes'])}",
+        f"graph_edges={len(dataset['graph_edges'])}",
     )
 
     return dataset

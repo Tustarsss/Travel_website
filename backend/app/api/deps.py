@@ -8,8 +8,10 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories import FacilityRepository, GraphRepository, RegionRepository
+from app.repositories.diaries import DiaryRepository
 from app.repositories.session import get_session
 from app.services import FacilityService, RecommendationService, RoutingService, SearchService
+from app.services.diary import DiaryService
 from app.services.map_data import MapDataService
 
 
@@ -68,6 +70,15 @@ async def get_search_service(
 	return SearchService(region_repository, graph_repository)
 
 
+async def get_diary_service(
+	session: AsyncSession = Depends(get_db_session),
+) -> DiaryService:
+	"""Provide a :class:`~app.services.diary.DiaryService` instance."""
+
+	diary_repository = DiaryRepository(session)
+	return DiaryService(diary_repository)
+
+
 __all__ = [
 	"get_db_session",
 	"get_recommendation_service",
@@ -75,4 +86,5 @@ __all__ = [
 	"get_facility_service",
 	"get_map_data_service",
 	"get_search_service",
+	"get_diary_service",
 ]

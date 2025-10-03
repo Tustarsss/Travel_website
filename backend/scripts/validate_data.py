@@ -11,7 +11,6 @@ MIN_REGION_COUNT = 200
 MIN_BUILDINGS_PER_REGION = 20
 MIN_FACILITIES_TOTAL = 50
 MIN_EDGE_COUNT = 200
-MIN_USER_COUNT = 10
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,8 +40,8 @@ def validate_dataset(dataset_dir: Path, indexes_dir: Path) -> None:
     regions = _load_json(dataset_dir / "regions.json")
     buildings = _load_json(dataset_dir / "buildings.json")
     facilities = _load_json(dataset_dir / "facilities.json")
+    graph_nodes = _load_json(dataset_dir / "graph_nodes.json")
     edges = _load_json(dataset_dir / "graph_edges.json")
-    users = _load_json(dataset_dir / "users.json")
 
     if len(regions) < MIN_REGION_COUNT:
         raise AssertionError(f"Region count {len(regions)} < {MIN_REGION_COUNT}")
@@ -58,11 +57,11 @@ def validate_dataset(dataset_dir: Path, indexes_dir: Path) -> None:
     if len(facilities) < MIN_FACILITIES_TOTAL:
         raise AssertionError(f"Facility count {len(facilities)} < {MIN_FACILITIES_TOTAL}")
 
+    if len(graph_nodes) < 2:
+        raise AssertionError("Graph node count is insufficient (expected at least 2 nodes)")
+
     if len(edges) < MIN_EDGE_COUNT:
         raise AssertionError(f"Edge count {len(edges)} < {MIN_EDGE_COUNT}")
-
-    if len(users) < MIN_USER_COUNT:
-        raise AssertionError(f"User count {len(users)} < {MIN_USER_COUNT}")
 
     indexes_dir.mkdir(parents=True, exist_ok=True)
     spatial = indexes_dir / "spatial.idx"
@@ -75,8 +74,8 @@ def validate_dataset(dataset_dir: Path, indexes_dir: Path) -> None:
     print(f"  Regions: {len(regions)}")
     print(f"  Buildings: {len(buildings)}")
     print(f"  Facilities: {len(facilities)}")
+    print(f"  Graph nodes: {len(graph_nodes)}")
     print(f"  Graph edges: {len(edges)}")
-    print(f"  Users: {len(users)}")
     print("[validate-data] Dataset validation passed!")
 
 
