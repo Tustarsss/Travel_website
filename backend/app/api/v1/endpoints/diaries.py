@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
 from app.models.enums import DiaryStatus
+from app.models.users import User
 from app.repositories.diaries import DiaryRepository
 from app.services.diary import DiaryService
 from app.schemas.diary import (
@@ -44,7 +45,7 @@ def _get_diary_service(session: AsyncSession = Depends(deps.get_db_session)) -> 
 async def create_diary(
     *,
     request: DiaryCreateRequest,
-    current_user_id: int = 1,  # TODO: Get from auth
+    current_user: User = Depends(deps.get_current_user),
     service: DiaryService = Depends(_get_diary_service),
 ) -> DiaryCreateResponse:
     """
@@ -57,7 +58,7 @@ async def create_diary(
     - Draft or published status
     """
     diary, compression_stats = await service.create_diary(
-        user_id=current_user_id,
+        user_id=current_user.id,
         request=request,
     )
     
@@ -208,7 +209,7 @@ async def update_diary(
     *,
     diary_id: int,
     request: DiaryUpdateRequest,
-    current_user_id: int = 1,  # TODO: Get from auth
+    current_user: User = Depends(deps.get_current_user),
     service: DiaryService = Depends(_get_diary_service),
 ) -> DiaryDetail:
     """
@@ -221,7 +222,7 @@ async def update_diary(
     try:
         diary = await service.update_diary(
             diary_id=diary_id,
-            user_id=current_user_id,
+            user_id=current_user.id,
             request=request,
         )
         
@@ -270,7 +271,7 @@ async def update_diary(
 async def delete_diary(
     *,
     diary_id: int,
-    current_user_id: int = 1,  # TODO: Get from auth
+    current_user: User = Depends(deps.get_current_user),
     service: DiaryService = Depends(_get_diary_service),
 ):
     """
@@ -283,7 +284,7 @@ async def delete_diary(
     try:
         success = await service.delete_diary(
             diary_id=diary_id,
-            user_id=current_user_id,
+            user_id=current_user.id,
         )
         
         if not success:
@@ -382,7 +383,7 @@ async def record_diary_view(
     diary_id: int,
     request: Request,
     view_request: DiaryViewRequest = None,
-    current_user_id: Optional[int] = None,  # Optional for anonymous views
+    current_user: Optional[User] = Depends(deps.get_optional_current_user),
     service: DiaryService = Depends(_get_diary_service),
 ):
     """
@@ -399,7 +400,7 @@ async def record_diary_view(
     
     success = await service.record_view(
         diary_id=diary_id,
-        user_id=current_user_id,
+        user_id=current_user.id if current_user else None,
         ip_address=ip_address,
         user_agent=user_agent,
     )
@@ -416,7 +417,7 @@ async def rate_diary(
     *,
     diary_id: int,
     request: DiaryRatingRequest,
-    current_user_id: int = 1,  # TODO: Get from auth
+    current_user: User = Depends(deps.get_current_user),
     service: DiaryService = Depends(_get_diary_service),
 ) -> DiaryRatingResponse:
     """
@@ -430,7 +431,7 @@ async def rate_diary(
     try:
         rating = await service.rate_diary(
             diary_id=diary_id,
-            user_id=current_user_id,
+            user_id=current_user.id,
             score=request.score,
             comment=request.comment,
         )

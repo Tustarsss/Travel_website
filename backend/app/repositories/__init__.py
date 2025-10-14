@@ -3,5 +3,12 @@
 from .graph import GraphRepository
 from .regions import RegionRepository
 from .facilities import FacilityRepository
+from .users import UserRepository, UserSessionRepository
 
-__all__ = ["RegionRepository", "GraphRepository", "FacilityRepository"]
+__all__ = [
+	"RegionRepository",
+	"GraphRepository",
+	"FacilityRepository",
+	"UserRepository",
+	"UserSessionRepository",
+]

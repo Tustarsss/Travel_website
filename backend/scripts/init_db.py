@@ -1,7 +1,7 @@
 """One-shot database initialization helper.
 
 This script creates the SQLite schema, loads generated map data when
-available, and seeds a small set of demo diaries so the Travel Website
+available, and prepares required directories so the Travel Website
 backend can run locally without bulky fixtures.
 """
 
@@ -13,15 +13,13 @@ from pathlib import Path
 import sys
 from typing import Any, Callable, Iterable, Sequence
 
-from sqlalchemy import delete, func, select  # type: ignore[import-untyped]
+from sqlalchemy import delete, func, select, text, update  # type: ignore[import-untyped]
 from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-untyped]
 
 from app.core.db import get_session_maker, init_db_async
-from app.models.diaries import Diary, DiaryRating
+from app.core.security import hash_password
 from app.models.enums import (
     BuildingCategory,
-    DiaryMediaType,
-    DiaryStatus,
     FacilityCategory,
     RegionType,
     TransportMode,
@@ -37,6 +35,8 @@ if str(PROJECT_ROOT) not in sys.path:
 
 GENERATED_DATA_DIR = PROJECT_ROOT / "data" / "generated"
 
+DEFAULT_MIGRATION_PASSWORD = "TravelTemp123!"
+DEFAULT_MIGRATION_PASSWORD_HASH = hash_password(DEFAULT_MIGRATION_PASSWORD)
 
 REQUIRED_DATASET_KEYS = (
     "regions",
@@ -223,29 +223,49 @@ async def import_generated_map_data(
         f"graph_edges={len(graph_edges)}",
     )
     return True
+async def _ensure_user_schema(session: AsyncSession) -> None:
+    """Add newly required user columns when initializing existing databases."""
 
-
-async def _get_or_create_user(
-    session: AsyncSession,
-    *,
-    username: str,
-    display_name: str,
-    email: str,
-    interests: list[str],
-) -> User:
-    existing = await session.scalar(select(User).where(User.username == username))
-    if existing:
-        return existing
-
-    user = User(
-        username=username,
-        display_name=display_name,
-        email=email,
-        interests=interests,
+    result = await session.execute(
+        text("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
     )
-    session.add(user)
-    await session.flush()
-    return user
+    table_exists = result.scalar() is not None
+    if not table_exists:
+        return
+
+    pragma_result = await session.execute(text("PRAGMA table_info(users)"))
+    columns = {row[1] for row in pragma_result}
+
+    if "hashed_password" not in columns:
+        print("[init-db] Adding missing 'hashed_password' column to users table...")
+        await session.execute(text("ALTER TABLE users ADD COLUMN hashed_password TEXT"))
+        await session.commit()
+
+    if "is_active" not in columns:
+        print("[init-db] Adding missing 'is_active' column to users table...")
+        await session.execute(
+            text("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+        )
+        await session.commit()
+
+    if "last_login_at" not in columns:
+        print("[init-db] Adding missing 'last_login_at' column to users table...")
+        await session.execute(text("ALTER TABLE users ADD COLUMN last_login_at DATETIME"))
+        await session.commit()
+
+    await session.execute(
+        update(User)
+        .where((User.hashed_password.is_(None)) | (User.hashed_password == ""))
+        .values(hashed_password=DEFAULT_MIGRATION_PASSWORD_HASH)
+    )
+    await session.commit()
+
+    await session.execute(
+        update(User)
+        .where(User.is_active.is_(None))
+        .values(is_active=True)
+    )
+    await session.commit()
 
 def ensure_directories() -> None:
     """Create directories that the application expects to exist."""
@@ -268,150 +288,6 @@ async def _clear_existing_data(session: AsyncSession, models: Sequence[type]) ->
     await session.commit()
 
 
-async def seed_sample_content(session: AsyncSession, *, keep_existing: bool) -> None:
-    existing_diaries = await session.scalar(select(func.count(Diary.id)))
-    if existing_diaries and keep_existing:
-        print("[init-db] Existing diaries detected; skipping sample diary seed.")
-        return
-
-    if not keep_existing:
-        print("[init-db] Clearing diary-related tables before seeding samples...")
-        await _clear_existing_data(session, (DiaryRating, Diary))
-
-    regions_result = await session.execute(select(Region).order_by(Region.id))
-    regions = list(regions_result.scalars().all())
-
-    if not regions:
-        print("[init-db] No regions available; creating fallback demo regions.")
-        fallback_regions = [
-            Region(
-                name="West Lake Scenic Area",
-                type=RegionType.SCENIC,
-                popularity=85,
-                rating=4.6,
-                description="Famous scenic area in Hangzhou with beautiful lakeside views.",
-                city="Hangzhou",
-                latitude=30.241,
-                longitude=120.150,
-            ),
-            Region(
-                name="Tsinghua University",
-                type=RegionType.CAMPUS,
-                popularity=92,
-                rating=4.8,
-                description="Historic campus known for academia and architecture.",
-                city="Beijing",
-                latitude=40.003,
-                longitude=116.326,
-            ),
-        ]
-        session.add_all(fallback_regions)
-        await session.flush()
-        regions = fallback_regions
-
-    sample_users = [
-        {
-            "username": "traveler_anna",
-            "display_name": "Anna Wang",
-            "email": "anna@example.com",
-            "interests": ["艺术", "美食"],
-        },
-        {
-            "username": "explorer_li",
-            "display_name": "Li Zhang",
-            "email": "li.zhang@example.com",
-            "interests": ["自然", "运动"],
-        },
-    ]
-
-    users: list[User] = []
-    for spec in sample_users:
-        user = await _get_or_create_user(session, **spec)
-        users.append(user)
-
-    primary_region = regions[0]
-    secondary_region = regions[1] if len(regions) > 1 else regions[0]
-
-    diaries = [
-        Diary(
-            user_id=users[0].id,
-            region_id=primary_region.id,
-            title="西湖慢行一日游",
-            summary="漫步苏堤与断桥，乘船赏雷峰塔的傍晚余晖。",
-            content="清晨从断桥出发，骑行绕湖一圈，中午品尝楼外楼的西湖醋鱼...",
-            compressed_content=None,
-            is_compressed=False,
-            media_urls=["https://example.com/photos/westlake-sunset.jpg"],
-            media_types=[DiaryMediaType.IMAGE],
-            tags=["自然", "美食"],
-            popularity=128,
-            rating=4.7,
-            ratings_count=2,
-            comments_count=0,
-            status=DiaryStatus.PUBLISHED,
-        ),
-        Diary(
-            user_id=users[1].id,
-            region_id=secondary_region.id,
-            title="清华校园骑行路线分享",
-            summary="骑行清华大学园区，探访荷塘月色和清华学堂。",
-            content="下午从西门进入校园，沿主干道骑行，经过二校门、清华学堂...",
-            compressed_content=None,
-            is_compressed=False,
-            media_urls=["https://example.com/photos/tsinghua-gate.png"],
-            media_types=[DiaryMediaType.IMAGE],
-            tags=["校园", "运动"],
-            popularity=86,
-            rating=4.5,
-            ratings_count=1,
-            comments_count=0,
-            status=DiaryStatus.PUBLISHED,
-        ),
-        Diary(
-            user_id=users[0].id,
-            region_id=secondary_region.id,
-            title="清华食堂探店打卡",
-            summary="盘点最受欢迎的清华食堂美食，含深夜小吃推荐。",
-            content="午餐在紫荆餐厅，推荐宫保鸡丁和现做豆腐；晚上在熙春园...",
-            compressed_content=None,
-            is_compressed=False,
-            media_urls=[
-                "https://example.com/photos/tsinghua-canteen.jpg",
-                "https://example.com/photos/late-night-snack.jpg",
-            ],
-            media_types=[DiaryMediaType.IMAGE, DiaryMediaType.IMAGE],
-            tags=["美食", "校园"],
-            popularity=64,
-            rating=4.2,
-            ratings_count=0,
-            comments_count=0,
-            status=DiaryStatus.PUBLISHED,
-        ),
-    ]
-
-    session.add_all(diaries)
-    await session.flush()
-
-    ratings = [
-        DiaryRating(
-            diary_id=diaries[0].id,
-            user_id=users[1].id,
-            score=5,
-            comment="景色实在太美了，路线安排也很详细！",
-        ),
-        DiaryRating(
-            diary_id=diaries[1].id,
-            user_id=users[0].id,
-            score=4,
-            comment="校园骑行路线很实用，期待更多照片。",
-        ),
-    ]
-    session.add_all(ratings)
-
-    await session.commit()
-    print("[init-db] Sample diaries inserted successfully.")
-
-
 async def initialize_database(keep_existing: bool, dataset_dir: Path | None = None) -> None:
     print("[init-db] Ensuring database schema exists...")
     await init_db_async()
@@ -421,12 +297,12 @@ async def initialize_database(keep_existing: bool, dataset_dir: Path | None = No
 
     maker = get_session_maker()
     async with maker() as session:
+        await _ensure_user_schema(session)
         await import_generated_map_data(
             session,
             dataset_dir or GENERATED_DATA_DIR,
             keep_existing=keep_existing,
         )
-        await seed_sample_content(session, keep_existing=keep_existing)
 
     print("[init-db] Database initialization complete.")
 
@@ -440,7 +316,7 @@ def main() -> None:
     parser.add_argument(
         "--keep-existing",
         action="store_true",
-        help="Keep existing rows instead of dropping them before seeding sample data.",
+    help="Keep existing rows instead of dropping them before importing new data.",
     )
     parser.add_argument(
         "--dataset-dir",

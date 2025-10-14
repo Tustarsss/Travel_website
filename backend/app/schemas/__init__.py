@@ -28,6 +28,8 @@ from .diary import (
 	UserSummary as DiaryUserSummary,
 	RegionSummary as DiaryRegionSummary,
 )
+from .user import UserPublic, UserCreateRequest, UserUpdateRequest
+from .auth import LoginRequest, TokenPair, RefreshRequest, LogoutRequest
 
 __all__ = [
 	"RegionRecommendationItem",
@@ -60,4 +62,11 @@ __all__ = [
 	"DiaryListParams",
 	"DiaryUserSummary",
 	"DiaryRegionSummary",
+	"UserPublic",
+	"UserCreateRequest",
+	"UserUpdateRequest",
+	"LoginRequest",
+	"TokenPair",
+	"RefreshRequest",
+	"LogoutRequest",
 ]

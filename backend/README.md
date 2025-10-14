@@ -53,7 +53,7 @@ CORS_ALLOWED_ORIGINS="http://your-frontend-host,http://another-host"
 	uv run python scripts/init_db.py --dataset-dir data/generated --keep-existing
 	```
 
-	脚本会创建 SQLite 模式、导入真实地图 JSON，并确保示例用户与日记存在。
+	脚本会创建 SQLite 模式、导入真实地图 JSON，并从 `data/samples/` 目录下的 `sample_users.json`、`sample_diaries.json`、`sample_diary_ratings.json` 读取示例用户/日记/评分后写入数据库。
 
 3. **维护辅助脚本**（按需执行）：
 
