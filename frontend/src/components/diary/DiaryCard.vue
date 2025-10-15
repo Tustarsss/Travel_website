@@ -51,9 +51,9 @@
         {{ diary.title }}
       </h3>
 
-      <!-- Summary -->
-      <p v-if="diary.summary" class="mb-3 line-clamp-2 text-sm text-slate-600">
-        {{ diary.summary }}
+      <!-- Content Preview -->
+      <p v-if="contentPreview" class="mb-3 line-clamp-2 text-sm text-slate-600">
+        {{ contentPreview }}
       </p>
 
       <!-- Meta Info -->
@@ -120,6 +120,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { DiaryListItem } from '../../types/diary'
 
 interface Props {
@@ -135,6 +136,8 @@ interface Emits {
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
+
+const contentPreview = computed(() => props.diary.content_preview?.trim() ?? '')
 
 const handleClick = () => {
   emit('click', props.diary)

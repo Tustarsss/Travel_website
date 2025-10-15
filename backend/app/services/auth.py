@@ -130,7 +130,13 @@ class AuthService:
         if not session:
             raise AuthServiceError("刷新令牌无效", status.HTTP_401_UNAUTHORIZED)
 
-        if session.expires_at < now:
+        expires_at = session.expires_at
+        if expires_at.tzinfo is None or expires_at.tzinfo.utcoffset(expires_at) is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        else:
+            expires_at = expires_at.astimezone(timezone.utc)
+
+        if expires_at < now:
             await self.session_repo.deactivate(session)
             raise AuthServiceError("刷新令牌已过期", status.HTTP_401_UNAUTHORIZED)
 

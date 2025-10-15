@@ -38,12 +38,10 @@ class DiaryCreateRequest(BaseModel):
     """Request schema for creating a new diary."""
     
     title: str = Field(..., min_length=1, max_length=200)
-    summary: Optional[str] = Field(None, max_length=500)
     content: str = Field(..., min_length=10)
     region_id: int = Field(..., gt=0)
     tags: List[str] = Field(default_factory=list, max_length=20)
-    media_urls: List[str] = Field(default_factory=list, max_length=50)
-    media_types: List[DiaryMediaType] = Field(default_factory=list, max_length=50)
+    media_placeholders: List["DiaryMediaPlaceholder"] = Field(default_factory=list, max_length=50)
     status: DiaryStatus = Field(default=DiaryStatus.PUBLISHED)
     
     @field_validator('tags')
@@ -54,27 +52,24 @@ class DiaryCreateRequest(BaseModel):
         cleaned = [tag.strip() for tag in v if tag.strip()]
         return list(dict.fromkeys(cleaned))[:20]  # Max 20 unique tags
     
-    @field_validator('media_types')
-    @classmethod
-    def validate_media_match(cls, v: List[DiaryMediaType], info) -> List[DiaryMediaType]:
-        """Ensure media_urls and media_types have same length."""
-        if 'media_urls' in info.data:
-            media_urls = info.data['media_urls']
-            if len(v) != len(media_urls):
-                raise ValueError('media_urls and media_types must have the same length')
-        return v
+
+
+class DiaryMediaPlaceholder(BaseModel):
+    """Mapping between content placeholder and uploaded media metadata."""
+
+    placeholder: str = Field(..., min_length=1, max_length=100)
+    media_type: DiaryMediaType
+    filename: str = Field(..., min_length=1, max_length=255)
+    content_type: Optional[str] = Field(None, max_length=100)
 
 
 class DiaryUpdateRequest(BaseModel):
     """Request schema for updating an existing diary."""
     
     title: Optional[str] = Field(None, min_length=1, max_length=200)
-    summary: Optional[str] = Field(None, max_length=500)
     content: Optional[str] = Field(None, min_length=10)
     region_id: Optional[int] = Field(None, gt=0)
     tags: Optional[List[str]] = Field(None, max_length=20)
-    media_urls: Optional[List[str]] = Field(None, max_length=50)
-    media_types: Optional[List[DiaryMediaType]] = Field(None, max_length=50)
     status: Optional[DiaryStatus] = None
 
 
@@ -84,7 +79,7 @@ class DiaryListItem(BaseModel):
     
     id: int
     title: str
-    summary: Optional[str]
+    content_preview: str = Field("", max_length=500)
     author: UserSummary
     region: RegionSummary
     cover_image: Optional[str] = None  # First image from media_urls
@@ -101,17 +96,32 @@ class DiaryListItem(BaseModel):
         from_attributes = True
 
 
+class DiaryMediaItem(BaseModel):
+    """Rich media information associated with a diary."""
+
+    id: int
+    placeholder: str
+    filename: str
+    content_type: str
+    media_type: DiaryMediaType
+    url: str
+    original_size: int
+    compressed_size: int
+    is_compressed: bool
+
+
 class DiaryDetail(BaseModel):
     """Complete diary information including content."""
     
     id: int
     title: str
-    summary: Optional[str]
+    content_preview: str = Field("", max_length=500)
     content: str  # Decompressed content
     author: UserSummary
     region: RegionSummary
     media_urls: List[str]
     media_types: List[DiaryMediaType]
+    media_items: List[DiaryMediaItem]
     tags: List[str]
     popularity: int
     rating: float
@@ -153,9 +163,40 @@ class DiaryRatingResponse(BaseModel):
     score: int
     comment: Optional[str]
     created_at: datetime
+    updated_at: datetime
     
     class Config:
         from_attributes = True
+
+
+class DiaryRatingUser(BaseModel):
+    """Minimal user info for ratings."""
+
+    id: int
+    username: str
+    display_name: str
+
+    class Config:
+        from_attributes = True
+
+
+class DiaryRatingItem(DiaryRatingResponse):
+    """Rating entry with embedded user info."""
+
+    user: DiaryRatingUser
+
+
+class DiaryRatingListResponse(BaseModel):
+    """Paginated list of ratings with statistics."""
+
+    items: List[DiaryRatingItem]
+    total: int
+    page: int
+    page_size: int
+    average_score: float
+    score_distribution: dict[int, int]
+    comments_count: int
+    current_user_rating: Optional[DiaryRatingItem] = None
 
 
 # ===== Diary View Schema =====

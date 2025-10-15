@@ -6,6 +6,7 @@
 - **路线规划**：输入图节点与策略后调用后端最优路径算法，展示节点序列、路段信息与交通方式限制，并支持一键交换起终点。
 - **路线地图**：规划结果生成后，在 Leaflet 地图中自动对齐节点与路径，提供起终点高亮和可视化图例。
 - **设施查询**：根据出发点、半径和类别筛选附近设施，并高亮展示距离、耗时、节点序列等详情。
+- **旅游日记**：浏览和分享旅行日记，支持智能推荐、评分和多媒体内容。
 - **共享偏好设置**：使用 Pinia 在各页面保存最近一次的查询参数，表单会自动回填。
 - **通用组件与组合式函数**：`PageSection`、`ErrorAlert`、`LoadingIndicator`、`EmptyState` 以及 `useApiRequest` 帮助统一 UI 与异步请求体验。
 
@@ -25,6 +26,45 @@
 ```bash
 VITE_API_BASE_URL=http://your-backend-host/api/v1
 ```
+
+## 主要目录结构
+
+```
+src/
+ ├─ pages/             # 路由页面（推荐、路线、设施、旅游日记）
+ ├─ router/            # Vue Router 配置
+ ├─ services/          # Axios 实例与后端 API 封装
+ ├─ stores/            # Pinia 偏好状态（查询参数持久化）
+ ├─ types/             # 后端响应类型定义
+ ├─ components/
+ │  ├─ ui/             # 通用 UI 组件（章节容器、加载态、空态等）
+ │  └─ map/            # 地图相关组件
+ ├─ composables/       # 通用组合式函数（如 useApiRequest）
+ ├─ constants/         # 示例数据、标签映射等
+ └─ style.css          # Tailwind 全局样式
+```
+
+## 核心功能页面
+
+### 景区推荐页面 (`/`)
+- 关键词搜索和兴趣标签过滤
+- 支持多种排序方式（综合/热门/评分）
+- 景区类型筛选（景区/校园）
+
+### 路线规划页面 (`/routing`)
+- 智能节点选择和路径计算
+- 支持距离最短/时间最短优化策略
+- 交互式地图可视化
+
+### 场所查询页面 (`/facilities`)
+- 基于实际步行距离的设施搜索
+- 设施类别过滤和路径展示
+- 搜索半径和数量限制
+
+### 旅游日记页面 (`/diaries`)
+- 日记浏览和智能推荐
+- 评分系统和热度统计
+- 多媒体内容支持
 
 ## 路线地图可视化
 
@@ -62,33 +102,25 @@ npm run build
 # 预览构建结果
 npm run preview
 ```
-```bash
-# 单独执行打包（开发阶段需要跳过类型检查时可使用）
-npm run bundle
 
-# 等价的原生命令
-npx vue-tsc --noEmit -p tsconfig.app.json
-npx vue-tsc --noEmit -p tsconfig.node.json
-npx vite build
-```
+## 技术栈
 
-## 主要目录结构
-
-```
-src/
- ├─ pages/             # 路由页面（推荐、路线、设施）
- ├─ router/            # Vue Router 配置
- ├─ services/          # Axios 实例与后端 API 封装
- ├─ stores/            # Pinia 偏好状态（查询参数持久化）
- ├─ types/             # 后端响应类型定义
- ├─ components/ui/     # 通用 UI 组件（章节容器、加载态、空态等）
- ├─ composables/       # 通用组合式函数（如 useApiRequest）
- ├─ constants/         # 示例数据、标签映射等
- └─ style.css          # Tailwind 全局样式
-```
+- **Vue 3** (Composition API)
+- **TypeScript** (严格模式)
+- **Vite 7.1.7** (构建工具)
+- **Tailwind CSS 3.4.14** (样式框架)
+- **Pinia 3.0.3** (状态管理)
+- **Vue Router 4.5.1** (路由)
+- **Leaflet 1.9.4** (地图库)
+- **Axios 1.12.2** (HTTP客户端)
+- **Tiptap** (富文本编辑器，用于日记功能)
 
 ## 后续工作
 
 - 根据后端真实数据优化表单默认值与可选项。
 - 在 Pinia 中引入持久化或跨页面共享状态（例如常用的 regionId、nodeId）。
 - 扩充可视化组件（地图、高亮路径等）以提升交互体验。
+
+---
+
+**最后更新**: 2025年10月15日

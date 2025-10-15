@@ -186,8 +186,10 @@ import type {
   DiaryDetail,
   DiaryRatingRequest,
   DiaryRatingResponse,
+  DiaryRatingListResponse,
   AnimationGenerateRequest,
   DiaryAnimation,
+  DiaryMediaUpload,
 } from '../types/diary'
 
 /**
@@ -250,9 +252,39 @@ export const fetchDiaryDetail = async (diaryId: number): Promise<DiaryDetail> =>
  * Create a new diary
  */
 export const createDiary = async (
-  request: DiaryCreateRequest
+  request: DiaryCreateRequest,
+  mediaUploads: DiaryMediaUpload[] = []
 ): Promise<DiaryCreateResponse> => {
-  const { data } = await apiClient.post<DiaryCreateResponse>('/diaries', request)
+  const formData = new FormData()
+  formData.append('title', request.title)
+  formData.append('content', request.content)
+  formData.append('region_id', request.region_id.toString())
+  formData.append('status_value', (request.status ?? 'published') as string)
+
+  const tags = request.tags ?? []
+  formData.append('tags', JSON.stringify(tags))
+
+  const manifest = mediaUploads.map((item) => ({
+    placeholder: item.placeholder,
+    media_type: item.media_type,
+    filename: item.filename,
+    content_type: item.content_type,
+  }))
+
+  if (manifest.length > 0) {
+    formData.append('media_manifest', JSON.stringify(manifest))
+  }
+
+  for (const media of mediaUploads) {
+    formData.append('media_files', media.file, media.filename)
+  }
+
+  const { data } = await apiClient.post<DiaryCreateResponse>('/diaries', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+
   return data
 }
 
@@ -292,6 +324,26 @@ export const rateDiary = async (
     `/diaries/${diaryId}/rate`,
     request
   )
+  return data
+}
+
+/**
+ * Fetch diary ratings with pagination
+ */
+export const fetchDiaryRatings = async (
+  diaryId: number,
+  params: { page?: number; page_size?: number } = {}
+): Promise<DiaryRatingListResponse> => {
+  const query = {
+    page: params.page ?? 1,
+    page_size: params.page_size ?? 10,
+  }
+
+  const { data } = await apiClient.get<DiaryRatingListResponse>(
+    `/diaries/${diaryId}/ratings`,
+    { params: query }
+  )
+
   return data
 }
 

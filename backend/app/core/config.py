@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     """Global application settings."""
 
     project_name: str = "Travel Website Backend"
+    public_api_url: str = "http://localhost:8000"
     api_prefix: str = "/api"
     api_v1_prefix: str = "/v1"
     debug: bool = True

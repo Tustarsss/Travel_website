@@ -1,6 +1,8 @@
 """AIGC animation generation service for travel diaries."""
 
 import asyncio
+import html
+import re
 import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime
@@ -100,8 +102,9 @@ class AIGCAnimationService:
         """Generate animation description from diary content."""
         base_description = f"Travel animation for: {diary.title}"
 
-        if diary.summary:
-            base_description += f"\nSummary: {diary.summary}"
+        content_preview = self._extract_plain_text(getattr(diary, "content", ""))
+        if content_preview:
+            base_description += f"\nContent: {content_preview}"
 
         # Add custom description if provided
         if params.get('custom_description'):
@@ -112,6 +115,22 @@ class AIGCAnimationService:
             base_description += f"\nTags: {', '.join(diary.tags)}"
 
         return base_description[:500]  # Limit length
+
+    def _extract_plain_text(self, html_content: Optional[str], max_length: int = 400) -> str:
+        """Convert rich HTML content into a concise plain-text preview."""
+        if not html_content:
+            return ""
+
+        text = re.sub(r"<(script|style)[^>]*>.*?</\1>", "", html_content, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"</p>", "\n", text, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = html.unescape(text)
+        text = re.sub(r"\s+", " ", text).strip()
+
+        if len(text) > max_length:
+            return text[:max_length].rstrip() + "…"
+        return text
 
     async def _submit_generation_task(self, generation_data: Dict[str, Any]) -> str:
         """

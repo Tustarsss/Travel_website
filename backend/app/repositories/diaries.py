@@ -3,12 +3,12 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import select, func, and_, or_, desc
+from sqlalchemy import select, func, and_, or_, desc, case
 from sqlalchemy.orm import selectinload
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.models.diaries import Diary, DiaryRating, DiaryView, DiaryAnimation
-from app.models.enums import DiaryStatus
+from app.models.diaries import Diary, DiaryAnimation, DiaryMedia, DiaryRating, DiaryView
+from app.models.enums import DiaryMediaType, DiaryStatus
 from app.models.users import User
 from app.models.locations import Region
 
@@ -26,6 +26,51 @@ class DiaryRepository:
         await self.session.refresh(diary)
         return diary
 
+    async def add_media(
+        self,
+        diary_id: int,
+        *,
+        placeholder: str,
+        filename: str,
+        content_type: str,
+        media_type: DiaryMediaType,
+        payload: bytes,
+        is_compressed: bool,
+        original_size: int,
+        compressed_size: int,
+    ) -> DiaryMedia:
+        """Persist a single media file for a diary."""
+        media = DiaryMedia(
+            diary_id=diary_id,
+            placeholder=placeholder,
+            filename=filename,
+            content_type=content_type,
+            media_type=media_type,
+            data=payload,
+            is_compressed=is_compressed,
+            original_size=original_size,
+            compressed_size=compressed_size,
+        )
+        self.session.add(media)
+        await self.session.flush()
+        await self.session.refresh(media)
+        return media
+
+    async def get_media(
+        self,
+        diary_id: int,
+        media_id: int,
+    ) -> Optional[DiaryMedia]:
+        """Fetch a diary media entry by id."""
+        query = select(DiaryMedia).where(
+            and_(
+                DiaryMedia.id == media_id,
+                DiaryMedia.diary_id == diary_id,
+            )
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
     async def get_by_id(
         self, 
         diary_id: int,
@@ -37,7 +82,9 @@ class DiaryRepository:
         if load_relationships:
             query = query.options(
                 selectinload(Diary.author),
-                selectinload(Diary.ratings),
+                selectinload(Diary.ratings).selectinload(DiaryRating.user),
+                selectinload(Diary.media_items),
+                selectinload(Diary.region),
             )
         
         result = await self.session.execute(query)
@@ -87,13 +134,13 @@ class DiaryRepository:
             tag_conditions = [Diary.tags.contains([tag]) for tag in tags]
             conditions.append(or_(*tag_conditions))
         
-        # Search query (simple LIKE search on title and summary)
+        # Search query (simple LIKE search on title and content)
         if search_query:
             search_pattern = f"%{search_query}%"
             conditions.append(
                 or_(
                     Diary.title.ilike(search_pattern),
-                    Diary.summary.ilike(search_pattern),
+                    Diary.content.ilike(search_pattern),
                 )
             )
         
@@ -112,6 +159,7 @@ class DiaryRepository:
             .where(where_clause)
             .options(
                 selectinload(Diary.author),
+                selectinload(Diary.region),
             )
             .offset(offset)
             .limit(page_size)
@@ -150,12 +198,26 @@ class DiaryRepository:
         query = (
             select(Diary)
             .where(where_clause)
-            .options(selectinload(Diary.author))
+            .options(
+                selectinload(Diary.author),
+                selectinload(Diary.region),
+            )
             .limit(k * 10)  # Fetch more candidates than needed for better ranking
         )
         
         result = await self.session.execute(query)
         return list(result.scalars().all())
+
+    async def get_regions_by_ids(self, region_ids: List[int]) -> dict[int, Region]:
+        """Fetch regions by id and return mapping keyed by region id."""
+        unique_ids = list({rid for rid in region_ids if rid})
+        if not unique_ids:
+            return {}
+
+        query = select(Region).where(Region.id.in_(unique_ids))
+        result = await self.session.execute(query)
+        regions = result.scalars().all()
+        return {region.id: region for region in regions}
 
     # === Rating Operations ===
     
@@ -206,6 +268,7 @@ class DiaryRepository:
         query = select(
             func.avg(DiaryRating.score).label('avg_rating'),
             func.count(DiaryRating.id).label('count'),
+            func.count(DiaryRating.comment).label('comments_count'),
         ).where(DiaryRating.diary_id == diary_id)
         
         result = await self.session.execute(query)
@@ -216,7 +279,79 @@ class DiaryRepository:
         if diary:
             diary.rating = float(row.avg_rating) if row.avg_rating else 0.0
             diary.ratings_count = row.count
+            diary.comments_count = row.comments_count or 0
             await self.session.commit()
+
+    async def list_ratings(
+        self,
+        diary_id: int,
+        *,
+        page: int = 1,
+        page_size: int = 10,
+    ) -> tuple[List[DiaryRating], int]:
+        """List ratings for a diary with pagination."""
+        offset = (page - 1) * page_size
+
+        query = (
+            select(DiaryRating)
+            .where(DiaryRating.diary_id == diary_id)
+            .options(selectinload(DiaryRating.user))
+            .order_by(desc(DiaryRating.updated_at))
+            .offset(offset)
+            .limit(page_size)
+        )
+        result = await self.session.execute(query)
+        items = list(result.scalars().all())
+
+        count_query = select(func.count(DiaryRating.id)).where(DiaryRating.diary_id == diary_id)
+        total_result = await self.session.execute(count_query)
+        total = total_result.scalar_one()
+
+        return items, total
+
+    async def get_rating_statistics(self, diary_id: int) -> dict:
+        """Calculate aggregated rating statistics for a diary."""
+        distribution_columns = [
+            func.sum(case((DiaryRating.score == score, 1), else_=0)).label(f"score_{score}")
+            for score in range(1, 6)
+        ]
+
+        stats_query = select(
+            func.avg(DiaryRating.score).label('avg_rating'),
+            func.count(DiaryRating.id).label('total'),
+            func.count(DiaryRating.comment).label('comments_count'),
+            *distribution_columns,
+        ).where(DiaryRating.diary_id == diary_id)
+
+        result = await self.session.execute(stats_query)
+        row = result.one()
+
+        distribution: dict[int, int] = {}
+        for score in range(1, 6):
+            value = getattr(row, f"score_{score}") or 0
+            distribution[score] = int(value)
+
+        return {
+            "average": float(row.avg_rating) if row.avg_rating else 0.0,
+            "total": int(row.total) if row.total else 0,
+            "comments_count": int(row.comments_count) if row.comments_count else 0,
+            "distribution": distribution,
+        }
+
+    async def get_rating_by_user(self, diary_id: int, user_id: int) -> Optional[DiaryRating]:
+        """Fetch a specific user's rating for a diary if it exists."""
+        query = (
+            select(DiaryRating)
+            .where(
+                and_(
+                    DiaryRating.diary_id == diary_id,
+                    DiaryRating.user_id == user_id,
+                )
+            )
+            .options(selectinload(DiaryRating.user))
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
 
     # === View Operations ===
     

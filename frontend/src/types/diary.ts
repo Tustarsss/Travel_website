@@ -8,6 +8,29 @@ export type DiaryMediaType = 'image' | 'video'
 
 export type DiarySortBy = 'hybrid' | 'popularity' | 'rating' | 'latest'
 
+export interface DiaryMediaPlaceholder {
+  placeholder: string
+  media_type: DiaryMediaType
+  filename: string
+  content_type?: string
+}
+
+export interface DiaryMediaUpload extends DiaryMediaPlaceholder {
+  file: File
+}
+
+export interface DiaryMediaItem {
+  id: number
+  placeholder: string
+  filename: string
+  content_type: string
+  media_type: DiaryMediaType
+  url: string
+  original_size: number
+  compressed_size: number
+  is_compressed: boolean
+}
+
 /**
  * Simplified user information
  */
@@ -33,7 +56,7 @@ export interface DiaryRegion {
 export interface DiaryListItem {
   id: number
   title: string
-  summary?: string
+  content_preview: string
   author: DiaryUser
   region: DiaryRegion
   cover_image?: string
@@ -54,6 +77,7 @@ export interface DiaryDetail extends DiaryListItem {
   content: string
   media_urls: string[]
   media_types: DiaryMediaType[]
+  media_items: DiaryMediaItem[]
   is_compressed: boolean
 }
 
@@ -62,12 +86,10 @@ export interface DiaryDetail extends DiaryListItem {
  */
 export interface DiaryCreateRequest {
   title: string
-  summary?: string
   content: string
   region_id: number
   tags?: string[]
-  media_urls?: string[]
-  media_types?: DiaryMediaType[]
+  media_placeholders?: DiaryMediaPlaceholder[]
   status?: DiaryStatus
 }
 
@@ -76,12 +98,9 @@ export interface DiaryCreateRequest {
  */
 export interface DiaryUpdateRequest {
   title?: string
-  summary?: string
   content?: string
   region_id?: number
   tags?: string[]
-  media_urls?: string[]
-  media_types?: DiaryMediaType[]
   status?: DiaryStatus
 }
 
@@ -148,6 +167,28 @@ export interface DiaryRatingResponse {
   score: number
   comment?: string
   created_at: string
+  updated_at: string
+}
+
+export interface DiaryRatingUser {
+  id: number
+  username: string
+  display_name: string
+}
+
+export interface DiaryRatingItem extends DiaryRatingResponse {
+  user: DiaryRatingUser
+}
+
+export interface DiaryRatingListResponse {
+  items: DiaryRatingItem[]
+  total: number
+  page: number
+  page_size: number
+  average_score: number
+  score_distribution: Record<number, number>
+  comments_count: number
+  current_user_rating?: DiaryRatingItem
 }
 
 /**

@@ -1,6 +1,6 @@
 """Diary related models."""
 
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from sqlalchemy import Column, JSON, LargeBinary, UniqueConstraint
 from sqlmodel import Field, Relationship
@@ -8,6 +8,9 @@ from sqlmodel import Field, Relationship
 from .base import BaseModel, TimestampMixin
 from .enums import DiaryMediaType, DiaryStatus
 from .users import User
+
+if TYPE_CHECKING:
+    from .locations import Region
 
 
 class Diary(TimestampMixin, BaseModel, table=True):
@@ -44,9 +47,32 @@ class Diary(TimestampMixin, BaseModel, table=True):
 
     # Relationships
     author: User = Relationship(back_populates="diaries")
+    region: "Region" = Relationship(back_populates="diaries")
     ratings: List["DiaryRating"] = Relationship(back_populates="diary", cascade_delete=True)
     views: List["DiaryView"] = Relationship(back_populates="diary", cascade_delete=True)
     animations: List["DiaryAnimation"] = Relationship(back_populates="diary", cascade_delete=True)
+    media_items: List["DiaryMedia"] = Relationship(
+        back_populates="diary",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+
+
+class DiaryMedia(TimestampMixin, BaseModel, table=True):
+    """Binary media (images/videos) associated with diaries."""
+
+    __tablename__ = "diary_media"
+
+    diary_id: int = Field(foreign_key="diaries.id", index=True)
+    placeholder: str = Field(max_length=100, index=True)
+    filename: str = Field(max_length=255)
+    content_type: str = Field(max_length=100)
+    media_type: DiaryMediaType = Field()
+    original_size: int = Field(ge=0)
+    compressed_size: int = Field(ge=0)
+    is_compressed: bool = Field(default=False)
+    data: bytes = Field(sa_column=Column(LargeBinary, nullable=False))
+
+    diary: "Diary" = Relationship(back_populates="media_items")
 
 
 class DiaryRating(TimestampMixin, BaseModel, table=True):
@@ -63,6 +89,7 @@ class DiaryRating(TimestampMixin, BaseModel, table=True):
     comment: Optional[str] = None
 
     diary: Diary = Relationship(back_populates="ratings")
+    user: User = Relationship(back_populates="ratings")
 
 
 class DiaryView(TimestampMixin, BaseModel, table=True):

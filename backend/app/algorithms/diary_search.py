@@ -34,7 +34,6 @@ class DiarySearchService:
         CREATE VIRTUAL TABLE IF NOT EXISTS {self.FTS_TABLE_NAME} USING fts5(
             diary_id UNINDEXED,
             title,
-            summary,
             content,
             tags,
             tokenize = 'porter unicode61'
@@ -46,8 +45,8 @@ class DiarySearchService:
             f"""
             CREATE TRIGGER IF NOT EXISTS diaries_fts_insert AFTER INSERT ON diaries
             BEGIN
-                INSERT INTO {self.FTS_TABLE_NAME}(diary_id, title, summary, content, tags)
-                VALUES (new.id, new.title, new.summary, new.content, json(new.tags));
+                INSERT INTO {self.FTS_TABLE_NAME}(diary_id, title, content, tags)
+                VALUES (new.id, new.title, new.content, json(new.tags));
             END;
             """,
             f"""
@@ -55,7 +54,6 @@ class DiarySearchService:
             BEGIN
                 UPDATE {self.FTS_TABLE_NAME} SET
                     title = new.title,
-                    summary = new.summary,
                     content = new.content,
                     tags = json(new.tags)
                 WHERE diary_id = new.id;
@@ -109,10 +107,6 @@ class DiarySearchService:
                 ELSE NULL
             END as title_match,
             CASE
-                WHEN fts.summary MATCH :query THEN 'summary'
-                ELSE NULL
-            END as summary_match,
-            CASE
                 WHEN fts.content MATCH :query THEN 'content'
                 ELSE NULL
             END as content_match,
@@ -148,15 +142,13 @@ class DiarySearchService:
             matched_fields = []
             if diary_data.get('title_match'):
                 matched_fields.append('title')
-            if diary_data.get('summary_match'):
-                matched_fields.append('summary')
             if diary_data.get('content_match'):
                 matched_fields.append('content')
             if diary_data.get('tags_match'):
                 matched_fields.append('tags')
 
             # Remove match indicator columns
-            for key in ['title_match', 'summary_match', 'content_match', 'tags_match']:
+            for key in ['title_match', 'content_match', 'tags_match']:
                 diary_data.pop(key, None)
 
             # Convert to Diary object (simplified - in practice you'd use proper ORM loading)
@@ -179,8 +171,8 @@ class DiarySearchService:
 
         # Re-populate from diaries table
         insert_sql = f"""
-    INSERT INTO {self.FTS_TABLE_NAME}(diary_id, title, summary, content, tags)
-    SELECT id, title, summary, content, json(tags)
+    INSERT INTO {self.FTS_TABLE_NAME}(diary_id, title, content, tags)
+    SELECT id, title, content, json(tags)
     FROM diaries
     WHERE status = 'published'
         """

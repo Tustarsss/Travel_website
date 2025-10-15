@@ -1,6 +1,16 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
+import type { Editor } from '@tiptap/core'
+import { EditorContent, useEditor } from '@tiptap/vue-3'
+import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import Link from '@tiptap/extension-link'
+import Placeholder from '@tiptap/extension-placeholder'
+import TextAlign from '@tiptap/extension-text-align'
+import CharacterCount from '@tiptap/extension-character-count'
+
 import PageSection from '../components/ui/PageSection.vue'
 import KeywordSearchSelect, { type SearchOption } from '../components/ui/KeywordSearchSelect.vue'
 import TagInput from '../components/ui/TagInput.vue'
@@ -8,33 +18,66 @@ import SuccessAlert from '../components/ui/SuccessAlert.vue'
 import ErrorAlert from '../components/ui/ErrorAlert.vue'
 import { useApiRequest } from '../composables/useApiRequest'
 import { createDiary, searchRegions } from '../services/api'
+import DiaryMedia from '../components/editor/extensions/diaryMedia'
+import { useAuthStore } from '../stores/auth'
+
 import type {
   DiaryCreateRequest,
   DiaryCreateResponse,
   DiaryMediaType,
+  DiaryMediaUpload,
   DiaryStatus,
 } from '../types/diary'
 import type { RegionSearchResult } from '../types/api'
 
-interface MediaItem {
-  url: string
+interface EditorMediaItem {
+  placeholder: string
   type: DiaryMediaType
+  previewUrl: string
+  upload: DiaryMediaUpload
 }
 
 const router = useRouter()
+const authStore = useAuthStore()
+const { isAuthenticated } = storeToRefs(authStore)
+
+const characterLimit = 5000
+const titleLimit = 40
 
 const form = reactive({
   title: '',
-  summary: '',
-  content: '',
+  contentHtml: '',
   status: 'published' as DiaryStatus,
 })
 
 const selectedRegion = ref<SearchOption<RegionSearchResult> | null>(null)
 const tags = ref<string[]>([])
-const mediaItems = ref<MediaItem[]>([
-  { url: '', type: 'image' },
-])
+const mediaUploads = ref<EditorMediaItem[]>([])
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+const tiptapEditor = useEditor({
+  extensions: [
+    StarterKit.configure({
+      heading: { levels: [1, 2, 3] },
+      bulletList: { keepMarks: true, keepAttributes: false },
+      orderedList: { keepMarks: true, keepAttributes: false },
+      link: false,
+      underline: false,
+    }),
+    Underline,
+    Link.configure({ openOnClick: false, autolink: true }),
+    TextAlign.configure({ types: ['heading', 'paragraph'] }),
+    Placeholder.configure({ placeholder: '输入正文' }),
+    CharacterCount.configure({ limit: characterLimit }),
+    DiaryMedia,
+  ],
+  content: '',
+  onUpdate: ({ editor: instance }: { editor: Editor }) => {
+    const html = instance.getHTML()
+    form.contentHtml = html
+    syncMediaUploadsWithContent(instance)
+  },
+})
 
 const createdDiary = ref<DiaryCreateResponse | null>(null)
 const submitted = ref(false)
@@ -43,11 +86,6 @@ const touched = reactive({
   region: false,
   content: false,
 })
-
-const mediaTypeOptions: Array<{ value: DiaryMediaType; label: string }> = [
-  { value: 'image', label: '图片' },
-  { value: 'video', label: '视频' },
-]
 
 const statusOptions: Array<{ value: DiaryStatus; label: string; description: string }> = [
   { value: 'published', label: '立即发布', description: '创建后立即公开展示' },
@@ -59,6 +97,7 @@ const {
   loading: submitting,
   error: submitError,
 } = useApiRequest(createDiary)
+
 
 const handleRegionSearch = async (keyword: string) => {
   const results = await searchRegions({ keyword, limit: 8 })
@@ -72,23 +111,12 @@ const handleRegionSearch = async (keyword: string) => {
   })) as SearchOption<RegionSearchResult>[]
 }
 
-const filteredMedia = computed(() => {
-  return mediaItems.value
-    .map((item) => ({
-      url: item.url.trim(),
-      type: item.type,
-    }))
-    .filter((item) => item.url.length > 0)
-})
-
-const invalidMediaItems = computed(() => {
-  return filteredMedia.value.filter((item) => !/^https?:\/\//i.test(item.url))
-})
+const titleLength = computed(() => form.title.trim().length)
 
 const titleError = computed(() => {
   if (!touched.title && !submitted.value) return null
-  if (!form.title.trim()) return '请输入日记标题'
-  if (form.title.trim().length > 200) return '标题不能超过 200 个字符'
+  if (titleLength.value === 0) return '请输入日记标题'
+  if (titleLength.value > titleLimit) return `标题不能超过 ${titleLimit} 个字符`
   return null
 })
 
@@ -98,59 +126,180 @@ const regionError = computed(() => {
   return null
 })
 
+const contentLength = computed(() => {
+  const instance = tiptapEditor.value
+  if (!instance) return 0
+  return instance.storage.characterCount?.characters() ?? (instance.getText() || '').length
+})
+
+const DOM_PARSER = new DOMParser()
+
+const releasePreviewUrl = (url: string | null | undefined) => {
+  if (!url || !url.startsWith('blob:')) {
+    return
+  }
+  URL.revokeObjectURL(url)
+}
+
+const decodeHtmlEntities = (input: string): string => {
+  if (!input) return ''
+  const textarea = document.createElement('textarea')
+  textarea.innerHTML = input
+  return textarea.value
+}
+
+const serializeContentForSubmission = (html: string): string => {
+  if (!html) return ''
+
+  let working = html
+
+  working = working.replace(
+    /<figure[^>]*data-placeholder="([^"]+)"[^>]*>[\s\S]*?<\/figure>/gi,
+    (_match, placeholder) => `\n{{media:${placeholder}}}\n`
+  )
+
+  working = working
+    .replace(/<br\s*\/?>(?=\s*\n?)/gi, '\n')
+    .replace(/<li[^>]*>/gi, '- ')
+    .replace(/<\/(p|div|section|article|h[1-6]|li)>/gi, '\n\n')
+
+  working = working.replace(/<[^>]+>/g, '')
+  working = decodeHtmlEntities(working)
+
+  const normalized = working
+    .replace(/\r/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim()
+
+  return normalized
+}
+
+const plainTextLength = computed(() => {
+  if (!form.contentHtml) return 0
+  const doc = DOM_PARSER.parseFromString(form.contentHtml, 'text/html')
+  return (doc.body.textContent ?? '').replace(/\s+/g, ' ').trim().length
+})
+
 const contentError = computed(() => {
   if (!touched.content && !submitted.value) return null
-  const length = form.content.trim().length
-  if (length === 0) return '请输入日记正文内容'
-  if (length < 10) return '正文内容至少需要 10 个字符'
+  if (plainTextLength.value === 0) return '请输入日记正文内容'
+  if (plainTextLength.value < 10) return '正文内容至少需要 10 个字符'
   return null
 })
 
-const mediaError = computed(() => {
-  if (invalidMediaItems.value.length === 0) return null
-  return '媒体链接需以 http 或 https 开头'
-})
-
 const canSubmit = computed(() => {
-  const titleLength = form.title.trim().length
-  const contentLengthValue = form.content.trim().length
   return (
-    titleLength > 0 &&
-    titleLength <= 200 &&
+    isAuthenticated.value &&
+    titleLength.value > 0 &&
+    titleLength.value <= titleLimit &&
     !!selectedRegion.value &&
-    contentLengthValue >= 10 &&
-    invalidMediaItems.value.length === 0
+    plainTextLength.value >= 10
   )
 })
 
-const summaryLength = computed(() => form.summary.trim().length)
-const contentLength = computed(() => form.content.trim().length)
+function syncMediaUploadsWithContent(editor: Editor | null) {
+  if (!editor) return
 
-const addMediaItem = () => {
-  mediaItems.value = [...mediaItems.value, { url: '', type: 'image' }]
+  const placeholders = new Set<string>()
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === 'diaryMedia' && typeof node.attrs.placeholder === 'string') {
+      placeholders.add(node.attrs.placeholder as string)
+    }
+  })
+
+  mediaUploads.value = mediaUploads.value.filter((item) => {
+    if (placeholders.has(item.placeholder)) {
+      return true
+    }
+    releasePreviewUrl(item.previewUrl)
+    return false
+  })
 }
 
-const removeMediaItem = (index: number) => {
-  if (mediaItems.value.length === 1) {
-    mediaItems.value = [{ url: '', type: 'image' }]
+const generatePlaceholder = (type: DiaryMediaType) =>
+  `media-${type}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+const triggerMediaUpload = () => {
+  if (!isAuthenticated.value) {
     return
   }
-  mediaItems.value = mediaItems.value.filter((_, i) => i !== index)
+  fileInputRef.value?.click()
+}
+
+const handleMediaFilesSelected = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const instance = tiptapEditor.value
+  if (!input.files || !instance) return
+
+  const files = Array.from(input.files)
+  files.forEach((file) => {
+    const mediaType: DiaryMediaType = file.type.startsWith('video') ? 'video' : 'image'
+    const placeholder = generatePlaceholder(mediaType)
+    const upload: DiaryMediaUpload = {
+      placeholder,
+      media_type: mediaType,
+      filename: file.name || `${mediaType}-${mediaUploads.value.length + 1}`,
+      content_type: file.type || undefined,
+      file,
+    }
+    const previewUrl = URL.createObjectURL(file)
+
+    mediaUploads.value.push({ placeholder, type: mediaType, previewUrl, upload })
+
+    instance
+      .chain()
+      .focus()
+      .insertDiaryMedia({
+        placeholder,
+        type: mediaType,
+        src: previewUrl,
+        filename: upload.filename,
+      })
+      .run()
+  })
+
+  form.contentHtml = instance.getHTML()
+  syncMediaUploadsWithContent(instance)
+
+  input.value = ''
+}
+
+const clearMediaUploads = () => {
+  mediaUploads.value.forEach((item) => releasePreviewUrl(item.previewUrl))
+  mediaUploads.value = []
 }
 
 const resetForm = () => {
   form.title = ''
-  form.summary = ''
-  form.content = ''
+  form.contentHtml = ''
   form.status = 'published'
   selectedRegion.value = null
   tags.value = []
-  mediaItems.value = [{ url: '', type: 'image' }]
   createdDiary.value = null
   submitted.value = false
   touched.title = false
   touched.region = false
   touched.content = false
+  clearMediaUploads()
+  tiptapEditor.value?.commands.clearContent()
+}
+
+const prepareSubmissionContent = () => {
+  if (!tiptapEditor.value) {
+    return { html: '', serialized: '' }
+  }
+
+  const html = tiptapEditor.value.getHTML()
+  form.contentHtml = html
+  syncMediaUploadsWithContent(tiptapEditor.value)
+
+  const serialized = serializeContentForSubmission(html)
+
+  return { html, serialized }
 }
 
 const handleSubmit = async () => {
@@ -159,24 +308,42 @@ const handleSubmit = async () => {
   touched.region = true
   touched.content = true
 
-  if (!canSubmit.value || submitting.value || !selectedRegion.value) {
+  if (
+    !canSubmit.value ||
+    submitting.value ||
+    !selectedRegion.value ||
+    !tiptapEditor.value ||
+    !isAuthenticated.value
+  ) {
     return
   }
 
-  const media = filteredMedia.value
+  const { serialized } = prepareSubmissionContent()
+  if (plainTextLength.value < 10 || serialized.length < 10) {
+    return
+  }
+
+  const mediaPlaceholders = mediaUploads.value.map((item) => ({
+    placeholder: item.placeholder,
+    media_type: item.type,
+    filename: item.upload.filename,
+    content_type: item.upload.content_type,
+  }))
+
   const payload: DiaryCreateRequest = {
     title: form.title.trim(),
-    summary: form.summary.trim() || undefined,
-    content: form.content.trim(),
+    content: serialized,
     region_id: Number(selectedRegion.value.id),
     tags: tags.value,
-    media_urls: media.map((item) => item.url),
-    media_types: media.map((item) => item.type),
+    media_placeholders: mediaPlaceholders,
     status: form.status,
   }
 
   try {
-    const response = await submitDiary(payload)
+    const response = await submitDiary(
+      payload,
+      mediaUploads.value.map((item) => item.upload)
+    )
     createdDiary.value = response
   } catch (error) {
     console.error('Failed to create diary', error)
@@ -192,6 +359,55 @@ const goToDiaryDetail = () => {
 const handleFocus = (field: 'title' | 'region' | 'content') => {
   touched[field] = true
 }
+
+const toggleBold = () => tiptapEditor.value?.chain().focus().toggleBold().run()
+const toggleStrike = () => tiptapEditor.value?.chain().focus().toggleStrike().run()
+const toggleItalic = () => tiptapEditor.value?.chain().focus().toggleItalic().run()
+const toggleUnderline = () => tiptapEditor.value?.chain().focus().toggleUnderline().run()
+const setParagraph = () => tiptapEditor.value?.chain().focus().setParagraph().run()
+const toggleBlockquote = () => tiptapEditor.value?.chain().focus().toggleBlockquote().run()
+const toggleBulletList = () => tiptapEditor.value?.chain().focus().toggleBulletList().run()
+const toggleOrderedList = () => tiptapEditor.value?.chain().focus().toggleOrderedList().run()
+const setTextAlign = (align: 'left' | 'center' | 'right') =>
+  tiptapEditor.value?.chain().focus().setTextAlign(align).run()
+const insertHorizontalRule = () => tiptapEditor.value?.chain().focus().setHorizontalRule().run()
+
+const promptLink = () => {
+  if (!tiptapEditor.value) return
+  const currentUrl = tiptapEditor.value.getAttributes('link').href as string | undefined
+  const url = window.prompt('输入链接地址', currentUrl || 'https://')
+
+  if (url === null) {
+    return
+  }
+
+  if (url === '') {
+    tiptapEditor.value.chain().focus().extendMarkRange('link').unsetLink().run()
+    return
+  }
+
+  tiptapEditor.value
+    .chain()
+    .focus()
+    .extendMarkRange('link')
+    .setLink({ href: url, target: '_blank', rel: 'noopener noreferrer' })
+    .run()
+}
+
+const isActive = (name: string, attrs?: Record<string, unknown>) => {
+  if (!tiptapEditor.value) return false
+  return tiptapEditor.value.isActive(name as any, attrs)
+}
+
+const alignmentIsActive = (align: 'left' | 'center' | 'right') => {
+  if (!tiptapEditor.value) return align === 'left'
+  return tiptapEditor.value.isActive({ textAlign: align })
+}
+
+onBeforeUnmount(() => {
+  clearMediaUploads()
+  tiptapEditor.value?.destroy()
+})
 </script>
 
 <template>
@@ -200,7 +416,7 @@ const handleFocus = (field: 'title' | 'region' | 'content') => {
       title="撰写旅行日记"
       description="记录旅途中的精彩瞬间，分享你的独特体验"
     >
-      <div class="mx-auto max-w-3xl space-y-6">
+      <div class="mx-auto max-w-4xl space-y-6">
         <SuccessAlert
           v-if="createdDiary"
           :message="`日记《${createdDiary.title}》创建成功！`"
@@ -212,126 +428,83 @@ const handleFocus = (field: 'title' | 'region' | 'content') => {
         />
 
         <form class="space-y-6" @submit.prevent="handleSubmit">
-          <!-- 基本信息 -->
-          <div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div>
-              <label class="block text-sm font-medium text-slate-700">日记标题 *</label>
+          <div class="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div class="space-y-2">
+              <div class="flex items-center justify-between text-sm text-slate-400">
+                <span>请输入标题（建议30字以内）</span>
+                <span>{{ titleLength }} / {{ titleLimit }}</span>
+              </div>
               <input
                 v-model="form.title"
                 type="text"
-                class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                placeholder="例如：西湖漫步，一日慢旅行"
-                maxlength="200"
+                class="title-input"
+                :maxlength="titleLimit"
+                placeholder="输入标题"
                 @focus="handleFocus('title')"
               />
-              <p v-if="titleError" class="mt-2 text-xs text-red-500">{{ titleError }}</p>
+              <p v-if="titleError" class="text-xs text-red-500">{{ titleError }}</p>
             </div>
 
-            <div>
-              <label class="block text-sm font-medium text-slate-700">关联地区 *</label>
-              <KeywordSearchSelect
-                v-model="selectedRegion"
-                class="mt-2"
-                :search="handleRegionSearch"
-                placeholder="搜索景区或园区"
-                @select="() => (touched.region = true)"
-                @clear="() => (touched.region = true)"
-              />
-              <p v-if="regionError" class="mt-2 text-xs text-red-500">{{ regionError }}</p>
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-slate-700">摘要</label>
-              <textarea
-                v-model="form.summary"
-                class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                rows="3"
-                placeholder="用几句话概括这次旅行的亮点"
-                maxlength="500"
-              ></textarea>
-              <div class="mt-1 text-right text-xs text-slate-400">
-                {{ summaryLength }} / 500
+            <div class="grid gap-4 md:grid-cols-2">
+              <div class="space-y-2">
+                <label class="block text-sm font-medium text-slate-700">关联地区 *</label>
+                <KeywordSearchSelect
+                  v-model="selectedRegion"
+                  :search="handleRegionSearch"
+                  placeholder="搜索景区或园区"
+                  @select="() => (touched.region = true)"
+                  @clear="() => (touched.region = true)"
+                />
+                <p v-if="regionError" class="text-xs text-red-500">{{ regionError }}</p>
               </div>
-            </div>
-          </div>
 
-          <!-- 标签与媒体 -->
-          <div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div>
-              <label class="block text-sm font-medium text-slate-700">标签</label>
-              <TagInput v-model="tags" :max-tags="10" class="mt-2" />
-              <p class="mt-1 text-xs text-slate-400">示例：美食、自然、亲子、夜景</p>
+              <div class="space-y-2">
+                <label class="block text-sm font-medium text-slate-700">标签</label>
+                <TagInput v-model="tags" :max-tags="10" placeholder="添加标签，回车确认" />
+                <p class="text-xs text-slate-400">示例：美食、自然、亲子、夜景</p>
+              </div>
             </div>
 
             <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <label class="block text-sm font-medium text-slate-700">媒体资源</label>
-                <button
-                  type="button"
-                  class="rounded-full border border-dashed border-primary/70 px-3 py-1 text-xs text-primary transition-colors hover:bg-primary/5"
-                  @click="addMediaItem"
-                >
-                  + 添加链接
-                </button>
+              <div class="editor-toolbar">
+                <button type="button" :class="{ active: isActive('paragraph') }" @click="setParagraph">T</button>
+                <button type="button" :class="{ active: isActive('bold') }" @click="toggleBold">B</button>
+                <button type="button" :class="{ active: isActive('strike') }" @click="toggleStrike">S</button>
+                <button type="button" :class="{ active: isActive('italic') }" @click="toggleItalic">I</button>
+                <button type="button" :class="{ active: isActive('underline') }" @click="toggleUnderline">A</button>
+                <div class="toolbar-divider"></div>
+                <button type="button" :class="{ active: isActive('blockquote') }" @click="toggleBlockquote">“</button>
+                <div class="toolbar-divider"></div>
+                <button type="button" :class="{ active: alignmentIsActive('left') }" @click="() => setTextAlign('left')">⟸</button>
+                <button type="button" :class="{ active: alignmentIsActive('center') }" @click="() => setTextAlign('center')">⇔</button>
+                <button type="button" :class="{ active: alignmentIsActive('right') }" @click="() => setTextAlign('right')">⟹</button>
+                <div class="toolbar-divider"></div>
+                <button type="button" :class="{ active: isActive('bulletList') }" @click="toggleBulletList">•</button>
+                <button type="button" :class="{ active: isActive('orderedList') }" @click="toggleOrderedList">1.</button>
+                <div class="toolbar-divider"></div>
+                <button type="button" @click="promptLink">🔗</button>
+                <button type="button" @click="triggerMediaUpload">🖼️</button>
+                <button type="button" @click="insertHorizontalRule">＋</button>
               </div>
 
-              <div class="space-y-3">
-                <div
-                  v-for="(item, index) in mediaItems"
-                  :key="index"
-                  class="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 md:flex-row md:items-center"
-                >
-                  <div class="flex-1">
-                    <input
-                      v-model="item.url"
-                      type="url"
-                      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      placeholder="https://example.com/photo.jpg"
-                    />
-                  </div>
-                  <div class="flex items-center gap-3">
-                    <select
-                      v-model="item.type"
-                      class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    >
-                      <option
-                        v-for="option in mediaTypeOptions"
-                        :key="option.value"
-                        :value="option.value"
-                      >
-                        {{ option.label }}
-                      </option>
-                    </select>
-                    <button
-                      type="button"
-                      class="text-xs text-slate-400 transition-colors hover:text-red-500"
-                      @click="removeMediaItem(index)"
-                    >
-                      删除
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <p v-if="mediaError" class="text-xs text-red-500">{{ mediaError }}</p>
-            </div>
-          </div>
+              <input
+                ref="fileInputRef"
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                class="hidden"
+                @change="handleMediaFilesSelected"
+              />
 
-          <!-- 内容与发布状态 -->
-          <div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div>
-              <label class="block text-sm font-medium text-slate-700">日记正文 *</label>
-              <textarea
-                v-model="form.content"
-                class="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm leading-relaxed focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                rows="10"
-                placeholder="详细描述你的旅程、感受与推荐……"
-                @focus="handleFocus('content')"
-              ></textarea>
-              <div class="mt-1 flex items-center justify-between text-xs text-slate-400">
-                <span>{{ contentLength }} 字</span>
+              <div class="editor-shell" @focus="handleFocus('content')">
+                <EditorContent :editor="tiptapEditor || undefined" />
+              </div>
+
+              <div class="flex items-center justify-between text-xs text-slate-400">
                 <span>内容不少于 10 字</span>
+                <span>{{ contentLength }} / {{ characterLimit }}</span>
               </div>
-              <p v-if="contentError" class="mt-2 text-xs text-red-500">{{ contentError }}</p>
+              <p v-if="contentError" class="text-xs text-red-500">{{ contentError }}</p>
             </div>
 
             <div>
@@ -358,7 +531,6 @@ const handleFocus = (field: 'title' | 'region' | 'content') => {
             </div>
           </div>
 
-          <!-- 操作按钮 -->
           <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div class="text-xs text-slate-400">带 * 为必填项</div>
             <div class="flex items-center gap-3">
@@ -392,3 +564,134 @@ const handleFocus = (field: 'title' | 'region' | 'content') => {
     </PageSection>
   </div>
 </template>
+
+<style scoped>
+.title-input {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.6);
+  padding: 0.75rem 1.25rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1f2937;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.title-input:focus {
+  outline: none;
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+  padding: 0.5rem 0.75rem;
+  background: #f8fafc;
+  flex-wrap: wrap;
+}
+
+.editor-toolbar button {
+  border: none;
+  background: transparent;
+  padding: 0.35rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.editor-toolbar button:hover {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.editor-toolbar button.active {
+  background: rgba(59, 130, 246, 0.18);
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 1.5rem;
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.editor-shell {
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 1rem;
+  min-height: 360px;
+  padding: 1.25rem;
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.editor-shell:focus-within {
+  border-color: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+}
+
+.editor-shell :deep(.ProseMirror) {
+  outline: none;
+  min-height: 320px;
+  white-space: pre-wrap;
+}
+
+.editor-shell :deep(.ProseMirror p) {
+  margin: 0 0 1rem;
+  line-height: 1.8;
+  color: #1f2937;
+}
+
+.editor-shell :deep(.editor-media-block) {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 1rem;
+  border: 1px dashed rgba(148, 163, 184, 0.6);
+  background: rgba(241, 245, 249, 0.7);
+  margin: 0.75rem 0;
+}
+
+.editor-shell :deep(.editor-media-block img),
+.editor-shell :deep(.editor-media-block video) {
+  max-width: 420px;
+  border-radius: 0.75rem;
+  background: #0f172a;
+}
+
+.editor-shell :deep(.editor-media-block figcaption) {
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+.editor-shell :deep(figcaption:empty) {
+  display: none;
+}
+
+.editor-shell :deep(blockquote) {
+  border-left: 4px solid rgba(59, 130, 246, 0.45);
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background: rgba(59, 130, 246, 0.08);
+  color: #1e293b;
+}
+
+.editor-shell :deep(ul),
+.editor-shell :deep(ol) {
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.editor-shell :deep(hr) {
+  border: none;
+  border-top: 1px dashed rgba(148, 163, 184, 0.5);
+  margin: 1.5rem 0;
+}
+</style>

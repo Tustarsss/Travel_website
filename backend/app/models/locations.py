@@ -1,12 +1,15 @@
 """Location and facility related database models."""
 
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from sqlalchemy import Column, Enum, Float
 from sqlmodel import Field, Relationship
 
 from .base import BaseModel, TimestampMixin
 from .enums import BuildingCategory, FacilityCategory, RegionType
+
+if TYPE_CHECKING:
+    from .diaries import Diary
 
 
 class Region(TimestampMixin, BaseModel, table=True):
@@ -25,6 +28,7 @@ class Region(TimestampMixin, BaseModel, table=True):
 
     buildings: List["Building"] = Relationship(back_populates="region")
     facilities: List["Facility"] = Relationship(back_populates="region")
+    diaries: List["Diary"] = Relationship(back_populates="region")
 
 
 class Building(TimestampMixin, BaseModel, table=True):

@@ -9,7 +9,7 @@ from sqlmodel import Field, Relationship
 from .base import BaseModel, TimestampMixin
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .diaries import Diary
+    from .diaries import Diary, DiaryRating
     from .sessions import UserSession
 
 
@@ -30,3 +30,4 @@ class User(TimestampMixin, BaseModel, table=True):
 
     diaries: List["Diary"] = Relationship(back_populates="author")
     sessions: List["UserSession"] = Relationship(back_populates="user", cascade_delete=True)
+    ratings: List["DiaryRating"] = Relationship(back_populates="user", cascade_delete=True)
