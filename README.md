@@ -44,9 +44,9 @@ cd backend
 uv sync
 # 首次使用需初始化数据库
 uv run python scripts/init_db.py
-
+ --reload
 # 启动开发服务器 (http://localhost:8000)
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app
 
 # 或直接使用 uvicorn
 uvicorn app.main:app --reload

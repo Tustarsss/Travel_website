@@ -24,6 +24,7 @@ dependencies = [
 	"passlib>=1.7.4",
 	"bcrypt==4.3.0",
 	"pyjwt[crypto]>=2.8.0",
+	"greenlet>=3.2.4",
 ]
 
 [project.optional-dependencies]
