@@ -84,9 +84,9 @@
           <div
             class="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-primary"
           >
-            {{ diary.author.display_name.charAt(0) }}
+            {{ diary.author.username.charAt(0) }}
           </div>
-          <span>{{ diary.author.display_name }}</span>
+          <span>{{ diary.author.username }}</span>
         </div>
         <div class="flex items-center gap-1">
           <span>📍</span>

@@ -11,7 +11,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 const form = reactive({
-  identifier: '',
+  email: '',
   password: '',
 })
 
@@ -21,8 +21,8 @@ const formError = ref<string | null>(null)
 const redirectTo = (route.query.redirect as string | undefined) ?? '/'
 
 const handleSubmit = async () => {
-  if (!form.identifier.trim() || !form.password) {
-    formError.value = '请输入账号和密码'
+  if (!form.email.trim() || !form.password) {
+    formError.value = '请输入邮箱和密码'
     return
   }
 
@@ -30,10 +30,7 @@ const handleSubmit = async () => {
   formError.value = null
 
   try {
-    await authStore.login({
-      identifier: form.identifier.trim(),
-      password: form.password,
-    })
+    await authStore.login({ email: form.email.trim(), password: form.password })
     await router.push(redirectTo)
   } catch (error: any) {
     formError.value = error?.response?.data?.detail ?? authStore.error ?? '登录失败，请稍后重试'
@@ -54,13 +51,13 @@ const handleSubmit = async () => {
 
         <form class="space-y-5" @submit.prevent="handleSubmit">
           <div class="space-y-2">
-            <label class="block text-sm font-medium text-slate-700">用户名或邮箱</label>
+            <label class="block text-sm font-medium text-slate-700">邮箱</label>
             <input
-              v-model="form.identifier"
-              type="text"
+              v-model="form.email"
+              type="email"
               class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10"
-              placeholder="请输入用户名或邮箱"
-              autocomplete="username"
+              placeholder="请输入邮箱"
+              autocomplete="email"
             />
           </div>
 

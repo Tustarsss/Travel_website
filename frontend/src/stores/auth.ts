@@ -5,14 +5,11 @@ import { configureAuthInterceptors } from '../services/apiClient'
 import {
   registerUser,
   loginUser,
-  refreshTokenPair,
-  logoutUser,
   fetchCurrentUser,
 } from '../services/auth'
 import type {
   LoginPayload,
   RegisterPayload,
-  TokenPair,
   UserPublic,
 } from '../types/auth'
 
@@ -21,35 +18,22 @@ let interceptorsConfigured = false
 
 interface PersistedSession {
   accessToken: string | null
-  refreshToken: string | null
-  tokenExpiresAt: number | null
-  refreshExpiresAt: number | null
   user: UserPublic | null
 }
 
-const toTimestamp = (isoString: string): number => new Date(isoString).getTime()
-
 export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref<string | null>(null)
-  const refreshToken = ref<string | null>(null)
-  const tokenExpiresAt = ref<number | null>(null)
-  const refreshExpiresAt = ref<number | null>(null)
   const user = ref<UserPublic | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
   const isAuthenticated = computed(() => {
-    if (!accessToken.value || !user.value) return false
-    if (tokenExpiresAt.value && tokenExpiresAt.value <= Date.now()) return false
-    return true
+    return Boolean(accessToken.value && user.value)
   })
 
   const persistSession = () => {
     const payload: PersistedSession = {
       accessToken: accessToken.value,
-      refreshToken: refreshToken.value,
-      tokenExpiresAt: tokenExpiresAt.value,
-      refreshExpiresAt: refreshExpiresAt.value,
       user: user.value,
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
@@ -57,22 +41,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   const clearSession = () => {
     accessToken.value = null
-    refreshToken.value = null
-    tokenExpiresAt.value = null
-    refreshExpiresAt.value = null
     user.value = null
     error.value = null
     localStorage.removeItem(STORAGE_KEY)
-  }
-
-  const applyTokenPair = (tokens: TokenPair) => {
-    accessToken.value = tokens.access_token
-    refreshToken.value = tokens.refresh_token
-    const issuedAt = toTimestamp(tokens.issued_at)
-    tokenExpiresAt.value = issuedAt + tokens.expires_in * 1000
-    refreshExpiresAt.value = issuedAt + tokens.refresh_expires_in * 1000
-    user.value = tokens.user
-    persistSession()
   }
 
   const loadFromStorage = () => {
@@ -81,9 +52,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const payload = JSON.parse(stored) as PersistedSession
       accessToken.value = payload.accessToken
-      refreshToken.value = payload.refreshToken
-      tokenExpiresAt.value = payload.tokenExpiresAt
-      refreshExpiresAt.value = payload.refreshExpiresAt
       user.value = payload.user
     } catch (err) {
       console.warn('Failed to parse auth session', err)
@@ -95,9 +63,13 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value = null
     try {
-      const tokens = await loginUser(credentials)
-      applyTokenPair(tokens)
-      return tokens.user
+      const res = await loginUser(credentials)
+      accessToken.value = res.access_token
+      persistSession()
+      // fetch profile separately
+      user.value = await fetchCurrentUser()
+      persistSession()
+      return user.value
     } catch (err: any) {
       error.value = err?.response?.data?.detail ?? '登录失败，请稍后重试'
       throw err
@@ -120,34 +92,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  const refreshTokens = async (): Promise<string | null> => {
-    if (!refreshToken.value) {
-      return null
-    }
-
-    if (refreshExpiresAt.value && refreshExpiresAt.value <= Date.now()) {
-      clearSession()
-      return null
-    }
-
-    try {
-      const tokens = await refreshTokenPair({ refresh_token: refreshToken.value })
-      applyTokenPair(tokens)
-      return tokens.access_token
-    } catch (err) {
-      clearSession()
-      return null
-    }
-  }
-
   const logout = async () => {
-    if (refreshToken.value) {
-      try {
-        await logoutUser({ refresh_token: refreshToken.value })
-      } catch (err) {
-        console.warn('Failed to notify backend logout', err)
-      }
-    }
     clearSession()
   }
 
@@ -166,14 +111,6 @@ export const useAuthStore = defineStore('auth', () => {
 
   const initialize = () => {
     loadFromStorage()
-    if (
-      accessToken.value &&
-      tokenExpiresAt.value &&
-      tokenExpiresAt.value <= Date.now() &&
-      refreshToken.value
-    ) {
-      void refreshTokens()
-    }
   }
 
   initialize()
@@ -181,7 +118,6 @@ export const useAuthStore = defineStore('auth', () => {
   if (!interceptorsConfigured) {
     configureAuthInterceptors({
       getAccessToken: () => accessToken.value,
-      refreshTokens,
       onUnauthorized: () => {
         clearSession()
       },
@@ -191,16 +127,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     accessToken,
-    refreshToken,
-    tokenExpiresAt,
-    refreshExpiresAt,
     user,
     loading,
     error,
     isAuthenticated,
     login,
     register,
-    refreshTokens,
     logout,
     ensureProfile,
     clearSession,

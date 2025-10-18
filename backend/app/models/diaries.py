@@ -1,6 +1,7 @@
 """Diary related models."""
 
 from typing import List, Optional, TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy import Column, JSON, LargeBinary, UniqueConstraint
 from sqlmodel import Field, Relationship
@@ -18,7 +19,7 @@ class Diary(TimestampMixin, BaseModel, table=True):
 
     __tablename__ = "diaries"
 
-    user_id: int = Field(foreign_key="users.id", index=True)
+    user_id: UUID = Field(foreign_key="users.id", index=True)
     region_id: int = Field(foreign_key="regions.id", index=True)
     title: str = Field(index=True)
     summary: Optional[str] = None
@@ -84,7 +85,7 @@ class DiaryRating(TimestampMixin, BaseModel, table=True):
     )
 
     diary_id: int = Field(foreign_key="diaries.id", index=True)
-    user_id: int = Field(foreign_key="users.id", index=True)
+    user_id: UUID = Field(foreign_key="users.id", index=True)
     score: int = Field(ge=1, le=5)
     comment: Optional[str] = None
 
@@ -98,7 +99,7 @@ class DiaryView(TimestampMixin, BaseModel, table=True):
     __tablename__ = "diary_views"
 
     diary_id: int = Field(foreign_key="diaries.id", index=True)
-    user_id: Optional[int] = Field(default=None, foreign_key="users.id", index=True)
+    user_id: Optional[UUID] = Field(default=None, foreign_key="users.id", index=True)
     ip_address: Optional[str] = Field(default=None, max_length=45)  # IPv6 support
     user_agent: Optional[str] = Field(default=None, max_length=255)
 

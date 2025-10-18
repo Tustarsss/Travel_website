@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
 
 from sqlalchemy import select, func, and_, or_, desc, case
 from sqlalchemy.orm import selectinload
@@ -108,7 +109,7 @@ class DiaryRepository:
         page: int = 1,
         page_size: int = 10,
         region_id: Optional[int] = None,
-        author_id: Optional[int] = None,
+    author_id: Optional[UUID] = None,
         status: Optional[DiaryStatus] = None,
         tags: Optional[List[str]] = None,
         search_query: Optional[str] = None,
@@ -224,7 +225,7 @@ class DiaryRepository:
     async def add_rating(
         self,
         diary_id: int,
-        user_id: int,
+    user_id: UUID,
         score: int,
         comment: Optional[str] = None,
     ) -> DiaryRating:
@@ -338,7 +339,7 @@ class DiaryRepository:
             "distribution": distribution,
         }
 
-    async def get_rating_by_user(self, diary_id: int, user_id: int) -> Optional[DiaryRating]:
+    async def get_rating_by_user(self, diary_id: int, user_id: UUID) -> Optional[DiaryRating]:
         """Fetch a specific user's rating for a diary if it exists."""
         query = (
             select(DiaryRating)
@@ -358,7 +359,7 @@ class DiaryRepository:
     async def record_view(
         self,
         diary_id: int,
-        user_id: Optional[int] = None,
+    user_id: Optional[UUID] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ) -> DiaryView:

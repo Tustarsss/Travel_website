@@ -35,9 +35,9 @@ export interface DiaryMediaItem {
  * Simplified user information
  */
 export interface DiaryUser {
-  id: number
+  id: string
   username: string
-  display_name: string
+  // display_name removed; use username
 }
 
 /**
@@ -163,7 +163,7 @@ export interface DiaryRatingRequest {
 export interface DiaryRatingResponse {
   id: number
   diary_id: number
-  user_id: number
+  user_id: string
   score: number
   comment?: string
   created_at: string
@@ -171,9 +171,9 @@ export interface DiaryRatingResponse {
 }
 
 export interface DiaryRatingUser {
-  id: number
+  id: string
   username: string
-  display_name: string
+  // display_name removed; use username
 }
 
 export interface DiaryRatingItem extends DiaryRatingResponse {
@@ -221,7 +221,7 @@ export interface DiaryListParams {
   page?: number
   page_size?: number
   region_id?: number
-  author_id?: number
+  author_id?: string
   status?: DiaryStatus
   interests?: string[]
   q?: string

@@ -13,7 +13,6 @@ from .enums import (
 from .graph import GraphEdge, GraphNode
 from .locations import Building, Facility, Region
 from .users import User
-from .sessions import UserSession
 
 __all__ = [
 	"BaseModel",
@@ -32,5 +31,4 @@ __all__ = [
 	"Facility",
 	"Region",
 	"User",
-	"UserSession",
 ]

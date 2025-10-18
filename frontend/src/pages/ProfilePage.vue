@@ -30,7 +30,7 @@ const { user, loading, error } = storeToRefs(authStore)
               </div>
               <div class="grid grid-cols-1 gap-1 sm:grid-cols-3">
                 <dt class="font-medium text-slate-500">昵称</dt>
-                <dd class="sm:col-span-2">{{ user.display_name }}</dd>
+                <dd class="sm:col-span-2">{{ user.username }}</dd>
               </div>
               <div class="grid grid-cols-1 gap-1 sm:grid-cols-3">
                 <dt class="font-medium text-slate-500">邮箱</dt>

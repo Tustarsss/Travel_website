@@ -146,14 +146,14 @@ class DiaryCacheService:
         ttl = self.CACHE_TTL['diary_detail']
         await self.set(key, data, ttl)
 
-    def _make_user_diaries_key(self, user_id: int, page: int, page_size: int, status: Optional[str] = None) -> str:
+    def _make_user_diaries_key(self, user_id: str, page: int, page_size: int, status: Optional[str] = None) -> str:
         """Generate cache key for user diaries."""
         status_str = status or 'all'
         return f"diary:user:{user_id}:{page}:{page_size}:{status_str}"
 
     async def get_user_diaries(
         self,
-        user_id: int,
+    user_id: str,
         page: int,
         page_size: int,
         status: Optional[str] = None
@@ -165,7 +165,7 @@ class DiaryCacheService:
     async def set_user_diaries(
         self,
         data: dict,
-        user_id: int,
+    user_id: str,
         page: int,
         page_size: int,
         status: Optional[str] = None,

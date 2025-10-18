@@ -6,6 +6,7 @@ import re
 import unicodedata
 from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
 from urllib.parse import quote
 
 from fastapi import (
@@ -559,7 +560,7 @@ async def list_diaries(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=50, description="Items per page"),
     region_id: Optional[int] = Query(None, description="Filter by region"),
-    author_id: Optional[int] = Query(None, description="Filter by author"),
+    author_id: Optional[UUID] = Query(None, description="Filter by author"),
     status: Optional[DiaryStatus] = Query(None, description="Filter by status"),
     interests: List[str] = Query(default=[], description="Filter by tags"),
     q: Optional[str] = Query(None, description="Search query"),
@@ -827,7 +828,7 @@ async def get_diary_animations(
 @router.get("/users/{user_id}/diaries", response_model=dict)
 async def get_user_diaries(
     *,
-    user_id: int,
+    user_id: UUID,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
     status: Optional[DiaryStatus] = Query(None),

@@ -12,6 +12,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 
 const form = reactive({
+  email: '',
   username: '',
   password: '',
   confirmPassword: '',
@@ -27,8 +28,8 @@ const handleSubmit = async () => {
   formError.value = null
   successMessage.value = null
 
-  if (!form.username.trim() || !form.password) {
-    formError.value = '请填写用户名和密码'
+  if (!form.email.trim() || !form.username.trim() || !form.password) {
+    formError.value = '请填写邮箱、用户名和密码'
     return
   }
 
@@ -46,17 +47,14 @@ const handleSubmit = async () => {
 
   try {
     await authStore.register({
+      email: form.email.trim(),
       username: form.username.trim(),
-      display_name: form.username.trim(),
       password: form.password,
     })
 
     successMessage.value = '注册成功，正在自动登录...'
 
-    await authStore.login({
-      identifier: form.username.trim(),
-      password: form.password,
-    })
+    await authStore.login({ email: form.email.trim(), password: form.password })
 
     await router.push(redirectTo)
   } catch (error: any) {
@@ -78,6 +76,17 @@ const handleSubmit = async () => {
         <SuccessAlert v-if="successMessage" :message="successMessage" />
 
         <form class="space-y-5" @submit.prevent="handleSubmit">
+          <div class="space-y-2">
+            <label class="block text-sm font-medium text-slate-700">邮箱</label>
+            <input
+              v-model="form.email"
+              type="email"
+              class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10"
+              placeholder="请输入邮箱"
+              autocomplete="email"
+            />
+          </div>
+
           <div class="space-y-2">
             <label class="block text-sm font-medium text-slate-700">用户名</label>
             <input
