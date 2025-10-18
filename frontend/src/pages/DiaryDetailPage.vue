@@ -179,7 +179,7 @@ const renderStars = (score: number): string => {
       <div
         class="flex-1 space-y-6 md:overflow-y-auto md:pr-6"
       >
-        <PageSection :title="diary.title" :description="`由 ${diary.author.display_name} 发布`">
+  <PageSection :title="diary.title" :description="`由 ${diary.author.username} 发布`">
           <div class="mb-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
             <div class="flex items-center gap-1">
               <span>📍</span>
@@ -319,7 +319,7 @@ const renderStars = (score: number): string => {
                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div class="text-sm font-semibold text-slate-700">
-                          {{ rating.user.display_name }}
+                          {{ rating.user.username }}
                         </div>
                         <div class="text-xs text-slate-500">@{{ rating.user.username }}</div>
                       </div>

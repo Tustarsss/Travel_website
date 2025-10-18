@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -12,9 +13,8 @@ from app.models.enums import DiaryMediaType, DiaryStatus
 class UserSummary(BaseModel):
     """Simplified user information for diary responses."""
     
-    id: int
+    id: UUID
     username: str
-    display_name: str
     
     class Config:
         from_attributes = True
@@ -159,7 +159,7 @@ class DiaryRatingResponse(BaseModel):
     
     id: int
     diary_id: int
-    user_id: int
+    user_id: UUID
     score: int
     comment: Optional[str]
     created_at: datetime
@@ -172,9 +172,8 @@ class DiaryRatingResponse(BaseModel):
 class DiaryRatingUser(BaseModel):
     """Minimal user info for ratings."""
 
-    id: int
+    id: UUID
     username: str
-    display_name: str
 
     class Config:
         from_attributes = True
@@ -284,7 +283,7 @@ class DiaryListParams(BaseModel):
     page_size: int = Field(10, ge=1, le=50)
     sort_by: str = Field('latest', pattern='^(latest|popularity|rating|hybrid)$')
     region_id: Optional[int] = Field(None, gt=0)
-    author_id: Optional[int] = Field(None, gt=0)
+    author_id: Optional[UUID] = None
     status: Optional[DiaryStatus] = None
     interests: List[str] = Field(default_factory=list)
     q: Optional[str] = None  # Search query

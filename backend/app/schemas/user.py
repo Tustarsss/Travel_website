@@ -12,7 +12,6 @@ class UserBase(BaseModel):
 	"""Shared user fields."""
 
 	username: str = Field(..., min_length=3, max_length=50)
-	display_name: str = Field(..., min_length=1, max_length=80)
 	interests: List[str] = Field(default_factory=list, max_length=20)
 
 	@field_validator("username")
@@ -20,10 +19,6 @@ class UserBase(BaseModel):
 	def normalize_username(cls, value: str) -> str:
 		return value.strip()
 
-	@field_validator("display_name")
-	@classmethod
-	def normalize_display_name(cls, value: str) -> str:
-		return value.strip()
 
 
 class UserCreateRequest(UserBase):
@@ -35,7 +30,6 @@ class UserCreateRequest(UserBase):
 class UserUpdateRequest(BaseModel):
 	"""Payload for updating user profile."""
 
-	display_name: Optional[str] = Field(None, min_length=1, max_length=80)
 	interests: Optional[List[str]] = Field(default=None, max_length=20)
 
 

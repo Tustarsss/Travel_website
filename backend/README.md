@@ -97,6 +97,27 @@ backend/
 
 ## 核心API接口
 
+### 认证与用户（基于 fastapi-users）
+
+- 注册：`POST /api/v1/auth/register`（JSON）
+	- 请求体示例：
+
+		```json
+		{ "email": "you@example.com", "username": "your_name", "password": "your_password", "interests": [] }
+		```
+
+	- 返回：用户信息（不含密码），用户主键为 UUID 字符串。
+- 登录（JWT）：`POST /api/v1/auth/jwt/login`（application/x-www-form-urlencoded）
+	- 表单字段：`username=<email>`, `password=<password>`
+	- 返回：`{ access_token, token_type: 'bearer' }`
+- 当前用户：`GET /api/v1/auth/me`（需 Bearer Token）
+- 用户管理：`/api/v1/users`（fastapi-users 提供的基础路由）
+
+说明：
+- 已彻底移除旧的自定义鉴权（登录/刷新/登出、会话模型等），统一使用 fastapi-users 的 JWT Bearer 模式。
+- 用户 ID 已切换为 UUID；前端与接口均以字符串表示。
+- 旧的 `display_name` 字段已废弃，统一使用 `username` 作为展示名。
+
 ### 景区推荐 (`/api/v1/recommendations`)
 - `GET /regions` - 获取景区推荐列表
 
@@ -121,4 +142,4 @@ backend/
 
 ---
 
-**最后更新**: 2025年10月15日
+**最后更新**: 2025年10月18日

@@ -19,7 +19,6 @@ from .routing import (
 )
 from .map_data import MapDataService
 from .search import SearchService
-from .auth import AuthService, AuthServiceError
 
 __all__ = [
     "top_k_by_score",
@@ -38,6 +37,4 @@ __all__ = [
     "RouteNotFoundError",
     "MapDataService",
     "SearchService",
-    "AuthService",
-    "AuthServiceError",
 ]

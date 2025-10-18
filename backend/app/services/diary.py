@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, TYPE_CHECKING
+from uuid import UUID
 from urllib.parse import urljoin
 
 from app.algorithms.diary_ranking import ranking_algorithm
@@ -46,8 +47,8 @@ class DiaryService:
         self._media_placeholder_pattern = re.compile(r"\{\{media:(?P<key>[a-zA-Z0-9_\-\.]+)\}\}")
 
     async def create_diary(
-        self,
-        user_id: int,
+    self,
+    user_id: UUID,
         request: DiaryCreateRequest,
         media_uploads: Optional[List[PendingDiaryMedia]] = None,
     ) -> tuple[Diary, dict]:
@@ -261,7 +262,7 @@ class DiaryService:
     async def update_diary(
         self,
         diary_id: int,
-        user_id: int,
+    user_id: UUID,
         request: DiaryUpdateRequest,
     ) -> Optional[Diary]:
         """Update an existing diary."""
@@ -309,7 +310,7 @@ class DiaryService:
     async def delete_diary(
         self,
         diary_id: int,
-        user_id: int,
+    user_id: UUID,
     ) -> bool:
         """Delete a diary (requires ownership)."""
         diary = await self.repo.get_by_id(diary_id, load_relationships=False)
@@ -448,7 +449,7 @@ class DiaryService:
         *,
         page: int = 1,
         page_size: int = 10,
-        current_user_id: Optional[int] = None,
+    current_user_id: Optional[UUID] = None,
     ) -> dict:
         """Retrieve paginated ratings with aggregate statistics."""
         diary = await self.repo.get_by_id(diary_id, load_relationships=False)
@@ -477,7 +478,7 @@ class DiaryService:
 
     async def get_user_diaries(
         self,
-        user_id: int,
+    user_id: UUID,
         page: int = 1,
         page_size: int = 10,
         status: Optional[DiaryStatus] = None,

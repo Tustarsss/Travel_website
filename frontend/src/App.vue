@@ -19,7 +19,7 @@ const { isAuthenticated, user } = storeToRefs(authStore)
 
 const activePath = computed(() => route.path)
 const displayName = computed(
-  () => user.value?.display_name ?? user.value?.username ?? '我的账户'
+  () => user.value?.username ?? '我的账户'
 )
 
 const showUserMenu = ref(false)

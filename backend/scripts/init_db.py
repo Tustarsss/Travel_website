@@ -17,7 +17,7 @@ from sqlalchemy import delete, func, select, text, update  # type: ignore[import
 from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore[import-untyped]
 
 from app.core.db import get_session_maker, init_db_async
-from app.core.security import hash_password
+from fastapi_users.password import PasswordHelper
 from app.models.enums import (
     BuildingCategory,
     FacilityCategory,
@@ -36,7 +36,8 @@ if str(PROJECT_ROOT) not in sys.path:
 GENERATED_DATA_DIR = PROJECT_ROOT / "data" / "generated"
 
 DEFAULT_MIGRATION_PASSWORD = "TravelTemp123!"
-DEFAULT_MIGRATION_PASSWORD_HASH = hash_password(DEFAULT_MIGRATION_PASSWORD)
+_pwd_helper = PasswordHelper()
+DEFAULT_MIGRATION_PASSWORD_HASH = _pwd_helper.hash(DEFAULT_MIGRATION_PASSWORD)
 
 REQUIRED_DATASET_KEYS = (
     "regions",

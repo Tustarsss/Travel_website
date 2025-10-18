@@ -373,7 +373,7 @@ export const fetchDiaryAnimations = async (diaryId: number): Promise<DiaryAnimat
  * Get user's diaries
  */
 export const fetchUserDiaries = async (
-  userId: number,
+  userId: string,
   params: { page?: number; page_size?: number; status?: string } = {}
 ): Promise<DiaryListResponse> => {
   const queryParams = {
